@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { CalendarDays, Bus, MapPin, Clock, Trash2, Plus, Search } from "lucide-react";
+import { CalendarDays, Bus, MapPin, Clock, Trash2, Plus, Search, Calendar, List, ChevronLeft, ChevronRight } from "lucide-react";
 import "./styles.css";
 
 const vehicleTypes = [
@@ -18,8 +18,8 @@ const emptyForm = {
   dropoffLocation: "",
   pickupDate: "",
   pickupTime: "",
-  dropoffDate: "",
-  dropoffTime: "",
+  returnDate: "",
+  returnTime: "",
   driverName: "",
   notes: "",
   status: "Scheduled",
@@ -46,6 +46,14 @@ function App() {
   const [form, setForm] = useState(emptyForm);
   const [trips, setTrips] = useState(loadTrips);
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState("list"); // "list" or "calendar"
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedTrip, setSelectedTrip] = useState(null);
+
+  const isCurrentSelectionAvailable = useMemo(() => {
+    if (!form.vehicleType || !form.pickupDate || !form.returnDate) return null;
+    return isVehicleAvailable(form.vehicleType, form.pickupDate, form.returnDate);
+  }, [form.vehicleType, form.pickupDate, form.returnDate, trips]);
 
   const filteredTrips = useMemo(() => {
     const q = search.toLowerCase();
@@ -58,6 +66,8 @@ function App() {
           trip.dropoffLocation,
           trip.driverName,
           trip.status,
+          trip.returnDate || trip.dropoffDate,
+          trip.returnTime || trip.dropoffTime,
         ]
           .join(" ")
           .toLowerCase()
@@ -78,15 +88,21 @@ function App() {
     event.preventDefault();
 
     const pickup = toDateTime(form.pickupDate, form.pickupTime);
-    const dropoff = toDateTime(form.dropoffDate, form.dropoffTime);
+    const returnDateTime = toDateTime(form.returnDate, form.returnTime);
 
-    if (!form.customerName || !form.pickupLocation || !form.dropoffLocation || !pickup || !dropoff) {
-      alert("Please fill in customer, locations, pickup date/time, and drop-off date/time.");
+    if (!form.customerName || !form.pickupLocation || !form.dropoffLocation || !pickup || !returnDateTime) {
+      alert("Please fill in customer, locations, pickup date/time, and return date/time.");
       return;
     }
 
-    if (dropoff <= pickup) {
-      alert("Drop-off date/time must be after pickup date/time.");
+    if (returnDateTime <= pickup) {
+      alert("Return date/time must be after pickup date/time.");
+      return;
+    }
+
+    // Check vehicle availability
+    if (!isVehicleAvailable(form.vehicleType, form.pickupDate, form.returnDate)) {
+      alert(`${form.vehicleType} is not available for the selected dates. Please choose different dates or another vehicle type.`);
       return;
     }
 
@@ -112,6 +128,64 @@ function App() {
     if (!confirm("Delete all schedules?")) return;
     setTrips([]);
     saveTrips([]);
+  }
+
+  // Calendar helper functions
+  function getDaysInMonth(date) {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  }
+
+  function getFirstDayOfMonth(date) {
+    return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+  }
+
+  function formatDateForComparison(date) {
+    return date.toISOString().split('T')[0];
+  }
+
+  function getDateRange(startDate, endDate) {
+    const dates = [];
+    const current = new Date(startDate);
+    const end = new Date(endDate);
+    
+    while (current <= end) {
+      dates.push(formatDateForComparison(current));
+      current.setDate(current.getDate() + 1);
+    }
+    return dates;
+  }
+
+  function getTripsForDate(dateStr) {
+    return filteredTrips.filter(trip => {
+      const tripDates = getDateRange(trip.pickupDate, trip.returnDate || trip.dropoffDate);
+      return tripDates.includes(dateStr);
+    });
+  }
+
+  function isVehicleAvailable(vehicleType, pickupDate, returnDate, excludeTripId = null) {
+    const requestedDates = getDateRange(pickupDate, returnDate);
+    
+    return !trips.some(trip => {
+      if (trip.id === excludeTripId) return false;
+      if (trip.vehicleType !== vehicleType) return false;
+      
+      const tripDates = getDateRange(trip.pickupDate, trip.returnDate || trip.dropoffDate);
+      return requestedDates.some(date => tripDates.includes(date));
+    });
+  }
+
+  function navigateMonth(direction) {
+    const newDate = new Date(currentDate);
+    newDate.setMonth(newDate.getMonth() + direction);
+    setCurrentDate(newDate);
+  }
+
+  function openTripModal(trip) {
+    setSelectedTrip(trip);
+  }
+
+  function closeTripModal() {
+    setSelectedTrip(null);
   }
 
   return (
@@ -145,6 +219,16 @@ function App() {
             <select value={form.vehicleType} onChange={(e) => updateField("vehicleType", e.target.value)}>
               {vehicleTypes.map((type) => <option key={type}>{type}</option>)}
             </select>
+            {isCurrentSelectionAvailable === false && (
+              <div className="availability-warning">
+                ⚠️ This vehicle type is not available for the selected dates
+              </div>
+            )}
+            {isCurrentSelectionAvailable === true && form.pickupDate && form.returnDate && (
+              <div className="availability-success">
+                ✅ This vehicle type is available for the selected dates
+              </div>
+            )}
           </label>
 
           <div className="two">
@@ -160,12 +244,12 @@ function App() {
 
           <div className="two">
             <label>
-              Drop-off Date
-              <input type="date" value={form.dropoffDate} onChange={(e) => updateField("dropoffDate", e.target.value)} />
+              Return Date
+              <input type="date" value={form.returnDate} onChange={(e) => updateField("returnDate", e.target.value)} />
             </label>
             <label>
-              Drop-off Time
-              <input type="time" value={form.dropoffTime} onChange={(e) => updateField("dropoffTime", e.target.value)} />
+              Return Time
+              <input type="time" value={form.returnTime} onChange={(e) => updateField("returnTime", e.target.value)} />
             </label>
           </div>
 
@@ -205,7 +289,25 @@ function App() {
         <section className="card schedules">
           <div className="toolbar">
             <h2><Bus size={20} /> Schedules</h2>
-            <button className="danger" onClick={clearAll} disabled={!trips.length}>Clear All</button>
+            <div className="viewControls">
+              <div className="viewToggle">
+                <button 
+                  className={`toggleButton ${viewMode === 'list' ? 'active' : ''}`}
+                  onClick={() => setViewMode('list')}
+                >
+                  <List size={18} />
+                  List
+                </button>
+                <button 
+                  className={`toggleButton ${viewMode === 'calendar' ? 'active' : ''}`}
+                  onClick={() => setViewMode('calendar')}
+                >
+                  <Calendar size={18} />
+                  Calendar
+                </button>
+              </div>
+              <button className="danger" onClick={clearAll} disabled={!trips.length}>Clear All</button>
+            </div>
           </div>
 
           <div className="search">
@@ -213,36 +315,215 @@ function App() {
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search schedules..." />
           </div>
 
-          {filteredTrips.length === 0 ? (
-            <div className="empty">No schedules yet.</div>
-          ) : (
-            <div className="tripList">
-              {filteredTrips.map((trip) => (
-                <article className="trip" key={trip.id}>
-                  <div className="tripTop">
-                    <div>
-                      <h3>{trip.customerName}</h3>
-                      <span className={`badge ${trip.status.toLowerCase().replace(" ", "-")}`}>{trip.status}</span>
+          {viewMode === 'calendar' && (
+            <div className="calendarView">
+              <div className="calendarHeader">
+                <button className="navButton" onClick={() => navigateMonth(-1)}>
+                  <ChevronLeft size={20} />
+                </button>
+                <h3>
+                  {currentDate.toLocaleDateString('en-US', { 
+                    month: 'long', 
+                    year: 'numeric' 
+                  })}
+                </h3>
+                <button className="navButton" onClick={() => navigateMonth(1)}>
+                  <ChevronRight size={20} />
+                </button>
+              </div>
+              
+              <div className="calendarGrid">
+                <div className="dayHeader">Sun</div>
+                <div className="dayHeader">Mon</div>
+                <div className="dayHeader">Tue</div>
+                <div className="dayHeader">Wed</div>
+                <div className="dayHeader">Thu</div>
+                <div className="dayHeader">Fri</div>
+                <div className="dayHeader">Sat</div>
+                
+                {Array.from({ length: getFirstDayOfMonth(currentDate) }).map((_, i) => (
+                  <div key={`empty-${i}`} className="calendarDay empty"></div>
+                ))}
+                
+                {Array.from({ length: getDaysInMonth(currentDate) }).map((_, i) => {
+                  const dayNumber = i + 1;
+                  const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`;
+                  const dayTrips = getTripsForDate(dateStr);
+                  const isToday = dateStr === formatDateForComparison(new Date());
+                  
+                  return (
+                    <div key={dayNumber} className={`calendarDay ${isToday ? 'today' : ''}`}>
+                      <span className="dayNumber">{dayNumber}</span>
+                      {dayTrips.length > 0 && (
+                        <div className="dayTrips">
+                          {dayTrips.slice(0, 2).map((trip) => {
+                            const isPickupDay = trip.pickupDate === dateStr;
+                            const isReturnDay = (trip.returnDate || trip.dropoffDate) === dateStr;
+                            const isMiddleDay = !isPickupDay && !isReturnDay;
+                            
+                            return (
+                              <div 
+                                key={trip.id} 
+                                className={`tripIndicator ${trip.status.toLowerCase().replace(" ", "-")} ${
+                                  isPickupDay ? 'pickup-day' : isReturnDay ? 'return-day' : 'middle-day'
+                                }`}
+                                onClick={() => openTripModal(trip)}
+                              >
+                                <span className="tripTime">
+                                  {isPickupDay ? `↗ ${trip.pickupTime}` : 
+                                   isReturnDay ? `↙ ${trip.returnTime || trip.dropoffTime}` : 
+                                   '━━━'}
+                                </span>
+                                <span className="tripCustomer">{trip.customerName}</span>
+                              </div>
+                            );
+                          })}
+                          {dayTrips.length > 2 && (
+                            <div className="moreTrips" onClick={() => openTripModal(dayTrips[2])}>
+                              +{dayTrips.length - 2} more
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <button className="iconButton" onClick={() => deleteTrip(trip.id)} aria-label="Delete trip">
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-
-                  <div className="details">
-                    <p><Bus size={16} /> {trip.vehicleType}</p>
-                    <p><Clock size={16} /> Pickup: {trip.pickupDate} at {trip.pickupTime}</p>
-                    <p><Clock size={16} /> Drop-off: {trip.dropoffDate} at {trip.dropoffTime}</p>
-                    <p><MapPin size={16} /> {trip.pickupLocation} → {trip.dropoffLocation}</p>
-                    {trip.driverName && <p>Driver: {trip.driverName}</p>}
-                    {trip.notes && <p className="notes">{trip.notes}</p>}
-                  </div>
-                </article>
-              ))}
+                  );
+                })}
+              </div>
             </div>
+          )}
+
+          {viewMode === 'list' && (
+            <>
+              {filteredTrips.length === 0 ? (
+                <div className="empty">No schedules yet.</div>
+              ) : (
+                <div className="tripList">
+                  {filteredTrips.map((trip) => (
+                    <article className="trip" key={trip.id}>
+                      <div className="tripTop">
+                        <div>
+                          <h3>{trip.customerName}</h3>
+                          <span className={`badge ${trip.status.toLowerCase().replace(" ", "-")}`}>{trip.status}</span>
+                        </div>
+                        <button className="iconButton" onClick={() => deleteTrip(trip.id)} aria-label="Delete trip">
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+
+                      <div className="details">
+                        <p><Bus size={16} /> {trip.vehicleType}</p>
+                        <p><Clock size={16} /> Pickup: {trip.pickupDate} at {trip.pickupTime}</p>
+                        <p><Clock size={16} /> Return: {trip.returnDate || trip.dropoffDate} at {trip.returnTime || trip.dropoffTime}</p>
+                        <p><MapPin size={16} /> {trip.pickupLocation} → {trip.dropoffLocation}</p>
+                        {trip.driverName && <p>Driver: {trip.driverName}</p>}
+                        {trip.notes && <p className="notes">{trip.notes}</p>}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </section>
       </section>
+
+      {/* Trip Details Modal */}
+      {selectedTrip && (
+        <div className="modal-overlay" onClick={closeTripModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Trip Details</h2>
+              <button className="modal-close" onClick={closeTripModal}>
+                ×
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="trip-detail-card">
+                <div className="trip-detail-header">
+                  <h3>{selectedTrip.customerName}</h3>
+                  <span className={`badge ${selectedTrip.status.toLowerCase().replace(" ", "-")}`}>
+                    {selectedTrip.status}
+                  </span>
+                </div>
+
+                <div className="trip-details-grid">
+                  <div className="detail-item">
+                    <Bus size={16} />
+                    <div>
+                      <span className="detail-label">Vehicle Type</span>
+                      <span className="detail-value">{selectedTrip.vehicleType}</span>
+                    </div>
+                  </div>
+
+                  <div className="detail-item">
+                    <Clock size={16} />
+                    <div>
+                      <span className="detail-label">Pickup</span>
+                      <span className="detail-value">
+                        {selectedTrip.pickupDate} at {selectedTrip.pickupTime}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="detail-item">
+                    <Clock size={16} />
+                    <div>
+                      <span className="detail-label">Return</span>
+                      <span className="detail-value">
+                        {selectedTrip.returnDate || selectedTrip.dropoffDate} at {selectedTrip.returnTime || selectedTrip.dropoffTime}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="detail-item">
+                    <MapPin size={16} />
+                    <div>
+                      <span className="detail-label">Route</span>
+                      <span className="detail-value">
+                        {selectedTrip.pickupLocation} → {selectedTrip.dropoffLocation}
+                      </span>
+                    </div>
+                  </div>
+
+                  {selectedTrip.driverName && (
+                    <div className="detail-item">
+                      <div className="driver-icon">👤</div>
+                      <div>
+                        <span className="detail-label">Driver</span>
+                        <span className="detail-value">{selectedTrip.driverName}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedTrip.notes && (
+                    <div className="detail-item notes-item">
+                      <div className="notes-icon">📝</div>
+                      <div>
+                        <span className="detail-label">Notes</span>
+                        <span className="detail-value notes-text">{selectedTrip.notes}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="modal-actions">
+                  <button className="danger" onClick={() => {
+                    deleteTrip(selectedTrip.id);
+                    closeTripModal();
+                  }}>
+                    <Trash2 size={16} />
+                    Delete Trip
+                  </button>
+                  <button className="secondary" onClick={closeTripModal}>
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
