@@ -46,14 +46,15 @@ function App() {
   const [form, setForm] = useState(emptyForm);
   const [trips, setTrips] = useState(loadTrips);
   const [search, setSearch] = useState("");
-  const [viewMode, setViewMode] = useState("list"); // "list" or "calendar"
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('bus_viewMode') || 'list');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedTrip, setSelectedTrip] = useState(null);
+  const [selectedDayData, setSelectedDayData] = useState(null);
 
   const isCurrentSelectionAvailable = useMemo(() => {
     if (!form.vehicleType || !form.pickupDate || !form.returnDate) return null;
-    return isVehicleAvailable(form.vehicleType, form.pickupDate, form.returnDate);
-  }, [form.vehicleType, form.pickupDate, form.returnDate, trips]);
+    return isVehicleAvailable(form.vehicleType, form.pickupDate, form.pickupTime, form.returnDate, form.returnTime);
+  }, [form.vehicleType, form.pickupDate, form.pickupTime, form.returnDate, form.returnTime, trips]);
 
   const filteredTrips = useMemo(() => {
     const q = search.toLowerCase();
@@ -101,7 +102,7 @@ function App() {
     }
 
     // Check vehicle availability
-    if (!isVehicleAvailable(form.vehicleType, form.pickupDate, form.returnDate)) {
+    if (!isVehicleAvailable(form.vehicleType, form.pickupDate, form.pickupTime, form.returnDate, form.returnTime)) {
       alert(`${form.vehicleType} is not available for the selected dates. Please choose different dates or another vehicle type.`);
       return;
     }
@@ -162,15 +163,26 @@ function App() {
     });
   }
 
-  function isVehicleAvailable(vehicleType, pickupDate, returnDate, excludeTripId = null) {
-    const requestedDates = getDateRange(pickupDate, returnDate);
-    
+  function isVehicleAvailable(vehicleType, pickupDate, pickupTime, returnDate, returnTime, excludeTripId = null) {
+    const reqStart = toDateTime(pickupDate, pickupTime || '00:00');
+    const reqEnd = toDateTime(returnDate, returnTime || '23:59');
+
+    if (!reqStart || !reqEnd) return true;
+
     return !trips.some(trip => {
       if (trip.id === excludeTripId) return false;
       if (trip.vehicleType !== vehicleType) return false;
-      
-      const tripDates = getDateRange(trip.pickupDate, trip.returnDate || trip.dropoffDate);
-      return requestedDates.some(date => tripDates.includes(date));
+
+      const tripStart = toDateTime(trip.pickupDate, trip.pickupTime || '00:00');
+      const tripEnd = toDateTime(
+        trip.returnDate || trip.dropoffDate,
+        trip.returnTime || trip.dropoffTime || '23:59'
+      );
+
+      if (!tripStart || !tripEnd) return false;
+
+      // Ranges overlap if start1 < end2 AND end1 > start2
+      return reqStart < tripEnd && reqEnd > tripStart;
     });
   }
 
@@ -186,6 +198,14 @@ function App() {
 
   function closeTripModal() {
     setSelectedTrip(null);
+  }
+
+  function openDayModal(dateStr, dayTrips) {
+    setSelectedDayData({ dateStr, trips: dayTrips });
+  }
+
+  function closeDayModal() {
+    setSelectedDayData(null);
   }
 
   return (
@@ -293,14 +313,14 @@ function App() {
               <div className="viewToggle">
                 <button 
                   className={`toggleButton ${viewMode === 'list' ? 'active' : ''}`}
-                  onClick={() => setViewMode('list')}
+                  onClick={() => { setViewMode('list'); localStorage.setItem('bus_viewMode', 'list'); }}
                 >
                   <List size={18} />
                   List
                 </button>
                 <button 
                   className={`toggleButton ${viewMode === 'calendar' ? 'active' : ''}`}
-                  onClick={() => setViewMode('calendar')}
+                  onClick={() => { setViewMode('calendar'); localStorage.setItem('bus_viewMode', 'calendar'); }}
                 >
                   <Calendar size={18} />
                   Calendar
@@ -379,7 +399,7 @@ function App() {
                             );
                           })}
                           {dayTrips.length > 2 && (
-                            <div className="moreTrips" onClick={() => openTripModal(dayTrips[2])}>
+                            <div className="moreTrips" onClick={() => openDayModal(dateStr, dayTrips)}>
                               +{dayTrips.length - 2} more
                             </div>
                           )}
@@ -519,6 +539,48 @@ function App() {
                     Close
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Day Overview Modal */}
+      {selectedDayData && (
+        <div className="modal-overlay" onClick={closeDayModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>
+                {new Date(selectedDayData.dateStr + 'T12:00:00').toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </h2>
+              <button className="modal-close" onClick={closeDayModal}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="tripList">
+                {selectedDayData.trips.map((trip) => (
+                  <article
+                    className="trip"
+                    key={trip.id}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => { closeDayModal(); openTripModal(trip); }}
+                  >
+                    <div className="tripTop">
+                      <div>
+                        <h3>{trip.customerName}</h3>
+                        <span className={`badge ${trip.status.toLowerCase().replace(' ', '-')}`}>{trip.status}</span>
+                      </div>
+                    </div>
+                    <div className="details">
+                      <p><Bus size={16} /> {trip.vehicleType}</p>
+                      <p><Clock size={16} /> Pickup: {trip.pickupDate} at {trip.pickupTime}</p>
+                      <p><Clock size={16} /> Return: {trip.returnDate || trip.dropoffDate} at {trip.returnTime || trip.dropoffTime}</p>
+                      <p><MapPin size={16} /> {trip.pickupLocation} → {trip.dropoffLocation}</p>
+                    </div>
+                  </article>
+                ))}
               </div>
             </div>
           </div>
