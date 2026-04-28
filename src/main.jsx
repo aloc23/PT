@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { CalendarDays, Bus, MapPin, Clock, Trash2, Plus, Search, Calendar, List, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, Bus, MapPin, Clock, Trash2, Plus, Search, Calendar, List, ChevronLeft, ChevronRight, Users, UserPlus } from "lucide-react";
 import "./styles.css";
 
 const vehicleTypes = [
@@ -37,6 +37,18 @@ function saveTrips(trips) {
   localStorage.setItem("bus_trips", JSON.stringify(trips));
 }
 
+function loadDrivers() {
+  try {
+    return JSON.parse(localStorage.getItem("bus_drivers")) || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveDrivers(drivers) {
+  localStorage.setItem("bus_drivers", JSON.stringify(drivers));
+}
+
 function toDateTime(date, time) {
   if (!date || !time) return null;
   return new Date(`${date}T${time}`);
@@ -51,6 +63,12 @@ function App() {
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [selectedDayData, setSelectedDayData] = useState(null);
 
+  // Driver management state
+  const [drivers, setDrivers] = useState(loadDrivers);
+  const [showAddDriver, setShowAddDriver] = useState(false);
+  const [newDriverName, setNewDriverName] = useState("");
+  const [driverFilter, setDriverFilter] = useState("");
+
   const isCurrentSelectionAvailable = useMemo(() => {
     if (!form.vehicleType || !form.pickupDate || !form.returnDate) return null;
     return isVehicleAvailable(form.vehicleType, form.pickupDate, form.pickupTime, form.returnDate, form.returnTime);
@@ -59,8 +77,9 @@ function App() {
   const filteredTrips = useMemo(() => {
     const q = search.toLowerCase();
     return trips
-      .filter((trip) =>
-        [
+      .filter((trip) => {
+        if (driverFilter && trip.driverName !== driverFilter) return false;
+        return [
           trip.customerName,
           trip.vehicleType,
           trip.pickupLocation,
@@ -72,14 +91,14 @@ function App() {
         ]
           .join(" ")
           .toLowerCase()
-          .includes(q)
-      )
+          .includes(q);
+      })
       .sort((a, b) => {
         const aTime = toDateTime(a.pickupDate, a.pickupTime)?.getTime() || 0;
         const bTime = toDateTime(b.pickupDate, b.pickupTime)?.getTime() || 0;
         return aTime - bTime;
       });
-  }, [trips, search]);
+  }, [trips, search, driverFilter]);
 
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -129,6 +148,32 @@ function App() {
     if (!confirm("Delete all schedules?")) return;
     setTrips([]);
     saveTrips([]);
+  }
+
+  function addDriver() {
+    const name = newDriverName.trim();
+    if (!name) {
+      alert("Please enter a driver name.");
+      return;
+    }
+    if (drivers.some((d) => d.name.toLowerCase() === name.toLowerCase())) {
+      alert("A driver with that name already exists.");
+      return;
+    }
+    const newDriver = { id: crypto.randomUUID(), name };
+    const next = [...drivers, newDriver];
+    setDrivers(next);
+    saveDrivers(next);
+    setNewDriverName("");
+    setShowAddDriver(false);
+    updateField("driverName", name);
+  }
+
+  function handleNewDriverKeyDown(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addDriver();
+    }
   }
 
   // Calendar helper functions
@@ -284,8 +329,38 @@ function App() {
           </label>
 
           <label>
-            Driver Name
-            <input value={form.driverName} onChange={(e) => updateField("driverName", e.target.value)} placeholder="Optional" />
+            Driver
+            <div className="driverInputRow">
+              <select
+                value={form.driverName}
+                onChange={(e) => updateField("driverName", e.target.value)}
+              >
+                <option value="">— Select driver —</option>
+                {drivers.map((d) => (
+                  <option key={d.id} value={d.name}>{d.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="addDriverBtn"
+                onClick={() => setShowAddDriver((v) => !v)}
+                title="Add a new driver"
+              >
+                <UserPlus size={16} />
+                {showAddDriver ? "Cancel" : "Add Driver"}
+              </button>
+            </div>
+            {showAddDriver && (
+              <div className="addDriverRow">
+                <input
+                  value={newDriverName}
+                  onChange={(e) => setNewDriverName(e.target.value)}
+                  placeholder="Driver name"
+                  onKeyDown={handleNewDriverKeyDown}
+                />
+                <button type="button" className="primary" onClick={addDriver}>Save</button>
+              </div>
+            )}
           </label>
 
           <label>
@@ -325,6 +400,13 @@ function App() {
                   <Calendar size={18} />
                   Calendar
                 </button>
+                <button
+                  className={`toggleButton ${viewMode === 'drivers' ? 'active' : ''}`}
+                  onClick={() => { setViewMode('drivers'); localStorage.setItem('bus_viewMode', 'drivers'); }}
+                >
+                  <Users size={18} />
+                  Drivers
+                </button>
               </div>
               <button className="danger" onClick={clearAll} disabled={!trips.length}>Clear All</button>
             </div>
@@ -334,6 +416,21 @@ function App() {
             <Search size={18} />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search schedules..." />
           </div>
+
+          {drivers.length > 0 && viewMode !== 'drivers' && (
+            <div className="driverFilter">
+              <Users size={16} />
+              <select
+                value={driverFilter}
+                onChange={(e) => setDriverFilter(e.target.value)}
+              >
+                <option value="">All drivers</option>
+                {drivers.map((d) => (
+                  <option key={d.id} value={d.name}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {viewMode === 'calendar' && (
             <div className="calendarView">
@@ -443,6 +540,59 @@ function App() {
                 </div>
               )}
             </>
+          )}
+
+          {viewMode === 'drivers' && (
+            <div className="driversView">
+              {drivers.length === 0 ? (
+                <div className="empty">No drivers yet. Use the form on the left to add a driver.</div>
+              ) : (
+                drivers.map((driver) => {
+                  const driverTrips = trips
+                    .filter((t) => t.driverName === driver.name)
+                    .sort((a, b) => {
+                      const aTime = toDateTime(a.pickupDate, a.pickupTime)?.getTime() || 0;
+                      const bTime = toDateTime(b.pickupDate, b.pickupTime)?.getTime() || 0;
+                      return aTime - bTime;
+                    });
+                  return (
+                    <div key={driver.id} className="driverSection">
+                      <div className="driverSectionHeader">
+                        <div className="driverSectionName">
+                          <Users size={18} />
+                          {driver.name}
+                        </div>
+                        <span className="driverTripCount">
+                          {driverTrips.length} booking{driverTrips.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      {driverTrips.length === 0 ? (
+                        <div className="driverEmpty">No bookings assigned to this driver.</div>
+                      ) : (
+                        <div className="tripList">
+                          {driverTrips.map((trip) => (
+                            <article className="trip" key={trip.id} style={{ cursor: 'pointer' }} onClick={() => openTripModal(trip)}>
+                              <div className="tripTop">
+                                <div>
+                                  <h3>{trip.customerName}</h3>
+                                  <span className={`badge ${trip.status.toLowerCase().replace(" ", "-")}`}>{trip.status}</span>
+                                </div>
+                              </div>
+                              <div className="details">
+                                <p><Bus size={16} /> {trip.vehicleType}</p>
+                                <p><Clock size={16} /> Pickup: {trip.pickupDate} at {trip.pickupTime}</p>
+                                <p><Clock size={16} /> Return: {trip.returnDate || trip.dropoffDate} at {trip.returnTime || trip.dropoffTime}</p>
+                                <p><MapPin size={16} /> {trip.pickupLocation} → {trip.dropoffLocation}</p>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           )}
         </section>
       </section>
