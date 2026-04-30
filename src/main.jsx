@@ -1,15 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { CalendarDays, Bus, MapPin, Clock, Trash2, Plus, Search, Calendar, List, ChevronLeft, ChevronRight, Users, UserPlus } from "lucide-react";
+import { CalendarDays, Bus, MapPin, Clock, Trash2, Plus, Search, Calendar, List, ChevronLeft, ChevronRight, Users, UserPlus, Settings, Pencil } from "lucide-react";
 import "./styles.css";
-
-const vehicleTypes = [
-  "Mini Bus",
-  "Coach",
-  "Double Decker",
-  "Accessible Bus",
-  "Van",
-];
 
 const emptyForm = {
   customerName: "",
@@ -49,6 +41,26 @@ function saveDrivers(drivers) {
   localStorage.setItem("bus_drivers", JSON.stringify(drivers));
 }
 
+function loadVehicles() {
+  try {
+    const stored = JSON.parse(localStorage.getItem("bus_vehicles"));
+    if (stored && stored.length > 0) return stored;
+  } catch {}
+  const defaults = [
+    { id: crypto.randomUUID(), name: "Mini Bus" },
+    { id: crypto.randomUUID(), name: "Coach" },
+    { id: crypto.randomUUID(), name: "Double Decker" },
+    { id: crypto.randomUUID(), name: "Accessible Bus" },
+    { id: crypto.randomUUID(), name: "Van" },
+  ];
+  localStorage.setItem("bus_vehicles", JSON.stringify(defaults));
+  return defaults;
+}
+
+function saveVehicles(vehicles) {
+  localStorage.setItem("bus_vehicles", JSON.stringify(vehicles));
+}
+
 function toDateTime(date, time) {
   if (!date || !time) return null;
   return new Date(`${date}T${time}`);
@@ -68,6 +80,13 @@ function App() {
   const [showAddDriver, setShowAddDriver] = useState(false);
   const [newDriverName, setNewDriverName] = useState("");
   const [driverFilter, setDriverFilter] = useState("");
+
+  // Vehicle management state
+  const [vehicles, setVehicles] = useState(loadVehicles);
+  const [showManageVehicles, setShowManageVehicles] = useState(false);
+  const [newVehicleName, setNewVehicleName] = useState("");
+  const [editingVehicleId, setEditingVehicleId] = useState(null);
+  const [editingVehicleName, setEditingVehicleName] = useState("");
 
   const isCurrentSelectionAvailable = useMemo(() => {
     if (!form.vehicleType || !form.pickupDate || !form.returnDate) return null;
@@ -176,6 +195,74 @@ function App() {
     }
   }
 
+  function addVehicle() {
+    const name = newVehicleName.trim();
+    if (!name) {
+      alert("Please enter a vehicle name.");
+      return;
+    }
+    if (vehicles.some((v) => v.name.toLowerCase() === name.toLowerCase())) {
+      alert("A vehicle with that name already exists.");
+      return;
+    }
+    const newVehicle = { id: crypto.randomUUID(), name };
+    const next = [...vehicles, newVehicle];
+    setVehicles(next);
+    saveVehicles(next);
+    setNewVehicleName("");
+  }
+
+  function startEditVehicle(vehicle) {
+    setEditingVehicleId(vehicle.id);
+    setEditingVehicleName(vehicle.name);
+  }
+
+  function saveEditVehicle() {
+    const name = editingVehicleName.trim();
+    if (!name) {
+      alert("Please enter a vehicle name.");
+      return;
+    }
+    const oldVehicle = vehicles.find((v) => v.id === editingVehicleId);
+    if (!oldVehicle) return;
+    if (
+      name.toLowerCase() !== oldVehicle.name.toLowerCase() &&
+      vehicles.some((v) => v.name.toLowerCase() === name.toLowerCase())
+    ) {
+      alert("A vehicle with that name already exists.");
+      return;
+    }
+    const oldName = oldVehicle.name;
+    const updatedVehicles = vehicles.map((v) =>
+      v.id === editingVehicleId ? { ...v, name } : v
+    );
+    setVehicles(updatedVehicles);
+    saveVehicles(updatedVehicles);
+    if (oldName !== name) {
+      const updatedTrips = trips.map((t) =>
+        t.vehicleType === oldName ? { ...t, vehicleType: name } : t
+      );
+      setTrips(updatedTrips);
+      saveTrips(updatedTrips);
+      if (form.vehicleType === oldName) {
+        updateField("vehicleType", name);
+      }
+    }
+    setEditingVehicleId(null);
+    setEditingVehicleName("");
+  }
+
+  function cancelEditVehicle() {
+    setEditingVehicleId(null);
+    setEditingVehicleName("");
+  }
+
+  function deleteVehicle(id) {
+    const next = vehicles.filter((v) => v.id !== id);
+    setVehicles(next);
+    saveVehicles(next);
+  }
+
   // Calendar helper functions
   function getDaysInMonth(date) {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -281,9 +368,23 @@ function App() {
 
           <label>
             Vehicle Type
-            <select value={form.vehicleType} onChange={(e) => updateField("vehicleType", e.target.value)}>
-              {vehicleTypes.map((type) => <option key={type}>{type}</option>)}
-            </select>
+            <div className="driverInputRow">
+              <select value={form.vehicleType} onChange={(e) => updateField("vehicleType", e.target.value)}>
+                {form.vehicleType && !vehicles.some((v) => v.name === form.vehicleType) && (
+                  <option value={form.vehicleType} aria-label={`Vehicle not found: ${form.vehicleType}`}>(missing) {form.vehicleType}</option>
+                )}
+                {vehicles.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
+              </select>
+              <button
+                type="button"
+                className="addDriverBtn"
+                onClick={() => setShowManageVehicles(true)}
+                title="Manage vehicles"
+              >
+                <Settings size={16} />
+                Manage
+              </button>
+            </div>
             {isCurrentSelectionAvailable === false && (
               <div className="availability-warning">
                 ⚠️ This vehicle type is not available for the selected dates
@@ -731,6 +832,67 @@ function App() {
                     </div>
                   </article>
                 ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Manage Vehicles Modal */}
+      {showManageVehicles && (
+        <div className="modal-overlay" onClick={() => { setShowManageVehicles(false); cancelEditVehicle(); setNewVehicleName(""); }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2><Bus size={20} /> Manage Vehicles</h2>
+              <button className="modal-close" onClick={() => { setShowManageVehicles(false); cancelEditVehicle(); setNewVehicleName(""); }}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="manageList">
+                {vehicles.length === 0 ? (
+                  <div className="empty">No vehicles yet. Add one below.</div>
+                ) : (
+                  vehicles.map((v) => (
+                    <div key={v.id} className="manageItem">
+                      {editingVehicleId === v.id ? (
+                        <div className="manageItemEdit">
+                          <input
+                            value={editingVehicleName}
+                            onChange={(e) => setEditingVehicleName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); saveEditVehicle(); }
+                              if (e.key === 'Escape') cancelEditVehicle();
+                            }}
+                            autoFocus
+                          />
+                          <button type="button" className="primary" onClick={saveEditVehicle}>Save</button>
+                          <button type="button" className="iconButton" onClick={cancelEditVehicle}>✕</button>
+                        </div>
+                      ) : (
+                        <div className="manageItemView">
+                          <span className="manageItemName">{v.name}</span>
+                          <div className="manageItemActions">
+                            <button type="button" className="iconButton" onClick={() => startEditVehicle(v)} title="Edit vehicle name">
+                              <Pencil size={15} />
+                            </button>
+                            <button type="button" className="iconButton" onClick={() => deleteVehicle(v.id)} title="Delete vehicle">
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="addDriverRow" style={{ marginTop: '16px', borderTop: '1px solid #f0f4f8', paddingTop: '16px' }}>
+                <input
+                  value={newVehicleName}
+                  onChange={(e) => setNewVehicleName(e.target.value)}
+                  placeholder="New vehicle name"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); addVehicle(); }
+                  }}
+                />
+                <button type="button" className="primary" onClick={addVehicle}>Add</button>
               </div>
             </div>
           </div>
