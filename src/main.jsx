@@ -257,7 +257,7 @@ function App() {
     <main className="page">
       <section className="hero">
         <div>
-          <p className="eyebrow">Bus Driving Company</p>
+          <p className="eyebrow">Priority Transfers</p>
           <h1>Vehicle Scheduling App</h1>
           <p className="subtitle">
             Schedule vehicle type, pickup/drop-off locations, dates, times, driver, and job status.
