@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { CalendarDays, Bus, MapPin, Clock, Trash2, Plus, Search, Calendar, List, ChevronLeft, ChevronRight, Users, UserPlus, Settings, Pencil } from "lucide-react";
+import { CalendarDays, Bus, MapPin, Clock, Trash2, Plus, Search, Calendar, List, ChevronLeft, ChevronRight, Users, Settings, Pencil } from "lucide-react";
 import "./styles.css";
 
 const emptyForm = {
@@ -77,9 +77,11 @@ function App() {
 
   // Driver management state
   const [drivers, setDrivers] = useState(loadDrivers);
-  const [showAddDriver, setShowAddDriver] = useState(false);
   const [newDriverName, setNewDriverName] = useState("");
   const [driverFilter, setDriverFilter] = useState("");
+  const [showManageDrivers, setShowManageDrivers] = useState(false);
+  const [editingDriverId, setEditingDriverId] = useState(null);
+  const [editingDriverName, setEditingDriverName] = useState("");
 
   // Vehicle management state
   const [vehicles, setVehicles] = useState(loadVehicles);
@@ -184,14 +186,68 @@ function App() {
     setDrivers(next);
     saveDrivers(next);
     setNewDriverName("");
-    setShowAddDriver(false);
     updateField("driverName", name);
   }
 
-  function handleNewDriverKeyDown(e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      addDriver();
+  function startEditDriver(driver) {
+    setEditingDriverId(driver.id);
+    setEditingDriverName(driver.name);
+  }
+
+  function saveEditDriver() {
+    const name = editingDriverName.trim();
+    if (!name) {
+      alert("Please enter a driver name.");
+      return;
+    }
+    const oldDriver = drivers.find((d) => d.id === editingDriverId);
+    if (!oldDriver) return;
+    if (
+      name.toLowerCase() !== oldDriver.name.toLowerCase() &&
+      drivers.some((d) => d.name.toLowerCase() === name.toLowerCase())
+    ) {
+      alert("A driver with that name already exists.");
+      return;
+    }
+    const oldName = oldDriver.name;
+    const updatedDrivers = drivers.map((d) =>
+      d.id === editingDriverId ? { ...d, name } : d
+    );
+    setDrivers(updatedDrivers);
+    saveDrivers(updatedDrivers);
+    if (oldName !== name) {
+      const updatedTrips = trips.map((t) =>
+        t.driverName === oldName ? { ...t, driverName: name } : t
+      );
+      setTrips(updatedTrips);
+      saveTrips(updatedTrips);
+      if (form.driverName === oldName) {
+        updateField("driverName", name);
+      }
+    }
+    setEditingDriverId(null);
+    setEditingDriverName("");
+  }
+
+  function cancelEditDriver() {
+    setEditingDriverId(null);
+    setEditingDriverName("");
+  }
+
+  function deleteDriver(id) {
+    const driver = drivers.find((d) => d.id === id);
+    if (!driver) return;
+    const driverTrips = trips.filter((t) => t.driverName === driver.name);
+    const message =
+      driverTrips.length > 0
+        ? `"${driver.name}" is assigned to ${driverTrips.length} trip(s). Delete anyway?`
+        : `Delete driver "${driver.name}"?`;
+    if (!confirm(message)) return;
+    const next = drivers.filter((d) => d.id !== id);
+    setDrivers(next);
+    saveDrivers(next);
+    if (form.driverName === driver.name) {
+      updateField("driverName", "");
     }
   }
 
@@ -444,24 +500,13 @@ function App() {
               <button
                 type="button"
                 className="addDriverBtn"
-                onClick={() => setShowAddDriver((v) => !v)}
-                title="Add a new driver"
+                onClick={() => setShowManageDrivers(true)}
+                title="Manage drivers"
               >
-                <UserPlus size={16} />
-                {showAddDriver ? "Cancel" : "Add Driver"}
+                <Settings size={16} />
+                Manage
               </button>
             </div>
-            {showAddDriver && (
-              <div className="addDriverRow">
-                <input
-                  value={newDriverName}
-                  onChange={(e) => setNewDriverName(e.target.value)}
-                  placeholder="Driver name"
-                  onKeyDown={handleNewDriverKeyDown}
-                />
-                <button type="button" className="primary" onClick={addDriver}>Save</button>
-              </div>
-            )}
           </label>
 
           <label>
@@ -893,6 +938,67 @@ function App() {
                   }}
                 />
                 <button type="button" className="primary" onClick={addVehicle}>Add</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Manage Drivers Modal */}
+      {showManageDrivers && (
+        <div className="modal-overlay" onClick={() => { setShowManageDrivers(false); cancelEditDriver(); setNewDriverName(""); }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2><Users size={20} /> Manage Drivers</h2>
+              <button className="modal-close" onClick={() => { setShowManageDrivers(false); cancelEditDriver(); setNewDriverName(""); }}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="manageList">
+                {drivers.length === 0 ? (
+                  <div className="empty">No drivers yet. Add one below.</div>
+                ) : (
+                  drivers.map((d) => (
+                    <div key={d.id} className="manageItem">
+                      {editingDriverId === d.id ? (
+                        <div className="manageItemEdit">
+                          <input
+                            value={editingDriverName}
+                            onChange={(e) => setEditingDriverName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); saveEditDriver(); }
+                              if (e.key === 'Escape') cancelEditDriver();
+                            }}
+                            autoFocus
+                          />
+                          <button type="button" className="primary" onClick={saveEditDriver}>Save</button>
+                          <button type="button" className="iconButton" onClick={cancelEditDriver}>✕</button>
+                        </div>
+                      ) : (
+                        <div className="manageItemView">
+                          <span className="manageItemName">{d.name}</span>
+                          <div className="manageItemActions">
+                            <button type="button" className="iconButton" onClick={() => startEditDriver(d)} title="Edit driver name">
+                              <Pencil size={15} />
+                            </button>
+                            <button type="button" className="iconButton" onClick={() => deleteDriver(d.id)} title="Delete driver">
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="addDriverRow" style={{ marginTop: '16px', borderTop: '1px solid #f0f4f8', paddingTop: '16px' }}>
+                <input
+                  value={newDriverName}
+                  onChange={(e) => setNewDriverName(e.target.value)}
+                  placeholder="New driver name"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); addDriver(); }
+                  }}
+                />
+                <button type="button" className="primary" onClick={addDriver}>Add</button>
               </div>
             </div>
           </div>
