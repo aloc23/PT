@@ -883,3 +883,54 @@ button:disabled {
 .driverSection .tripList {
   padding: 14px;
 }
+
+/* Manage Vehicles Modal */
+.manageList {
+  display: grid;
+  gap: 8px;
+}
+
+.manageItem {
+  border: 1px solid #e3eaf4;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.manageItemView {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  background: #fbfdff;
+}
+
+.manageItemName {
+  font-weight: 600;
+  font-size: 14px;
+  color: #172033;
+}
+
+.manageItemActions {
+  display: flex;
+  gap: 6px;
+}
+
+.manageItemEdit {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  align-items: center;
+}
+
+.manageItemEdit input {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+.manageItemEdit button {
+  padding: 8px 14px;
+  font-size: 13px;
+  white-space: nowrap;
+}
