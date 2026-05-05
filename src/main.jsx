@@ -5,6 +5,7 @@ import "./styles.css";
 
 const emptyForm = {
   customerName: "",
+  bookingReferenceNumber: "",
   vehicleType: "Mini Bus",
   pickupLocation: "",
   dropoffLocation: "",
@@ -102,6 +103,7 @@ function App() {
         if (driverFilter && trip.driverName !== driverFilter) return false;
         return [
           trip.customerName,
+          trip.bookingReferenceNumber,
           trip.vehicleType,
           trip.pickupLocation,
           trip.dropoffLocation,
@@ -423,6 +425,11 @@ function App() {
           </label>
 
           <label>
+            Booking Reference Number
+            <input value={form.bookingReferenceNumber} onChange={(e) => updateField("bookingReferenceNumber", e.target.value)} placeholder="e.g. BRN-12345" />
+          </label>
+
+          <label>
             Vehicle Type
             <div className="driverInputRow">
               <select value={form.vehicleType} onChange={(e) => updateField("vehicleType", e.target.value)}>
@@ -679,6 +686,7 @@ function App() {
                         <p><Clock size={16} /> Return: {trip.returnDate || trip.dropoffDate} at {trip.returnTime || trip.dropoffTime}</p>
                         <p><MapPin size={16} /> {trip.pickupLocation} → {trip.dropoffLocation}</p>
                         {trip.driverName && <p>Driver: {trip.driverName}</p>}
+                        {trip.bookingReferenceNumber && <p>Ref: {trip.bookingReferenceNumber}</p>}
                         {trip.notes && <p className="notes">{trip.notes}</p>}
                       </div>
                     </article>
@@ -771,6 +779,16 @@ function App() {
                       <span className="detail-value">{selectedTrip.vehicleType}</span>
                     </div>
                   </div>
+
+                  {selectedTrip.bookingReferenceNumber && (
+                    <div className="detail-item">
+                      <div className="notes-icon">🔖</div>
+                      <div>
+                        <span className="detail-label">Booking Reference</span>
+                        <span className="detail-value">{selectedTrip.bookingReferenceNumber}</span>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="detail-item">
                     <Clock size={16} />

@@ -10,6 +10,7 @@ Once GitHub Pages is enabled (see below), the app is available at:
 ## Features
 
 - Add customer/company name
+- Add an optional booking reference number
 - Select vehicle type (Mini Bus, Coach, Double Decker, Accessible Bus, Van)
 - Add pickup and drop-off locations
 - Add pickup and drop-off dates/times (with validation: pickup must be before drop-off)
@@ -29,6 +30,7 @@ Once GitHub Pages is enabled (see below), the app is available at:
 
 1. Fill in the **New Schedule** form on the left:
    - Enter a customer or company name
+   - Enter an optional booking reference number (e.g. `BRN-12345`)
    - Choose a vehicle type from the dropdown
    - Set the pickup date/time and return date/time
    - Enter pickup and drop-off locations
