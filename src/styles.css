@@ -934,3 +934,277 @@ button:disabled {
   font-size: 13px;
   white-space: nowrap;
 }
+
+/* =========================================================================
+   Auth screen
+   ========================================================================= */
+.authPage {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(1200px 600px at -10% -20%, rgba(29, 95, 208, 0.16), transparent 60%),
+    radial-gradient(1000px 500px at 110% 110%, rgba(35, 79, 135, 0.18), transparent 60%),
+    #eef3f8;
+}
+
+.authCard {
+  width: 100%;
+  max-width: 440px;
+  background: white;
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: 0 20px 60px rgba(28, 54, 96, 0.18);
+}
+
+.authBrand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 6px;
+}
+
+.authBrand svg {
+  color: #1d5fd0;
+  background: #e8f1ff;
+  padding: 8px;
+  border-radius: 12px;
+  box-sizing: content-box;
+}
+
+.authBrand h1 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.authSub {
+  margin: 14px 0 18px;
+  color: #4a5b7a;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.authOAuth {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.oauthBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  background: #ffffff;
+  color: #1f2a44;
+  border: 1px solid #d9e1ec;
+  padding: 12px 14px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 14px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.oauthBtn:hover:not(:disabled) {
+  background: #f5f8fc;
+  border-color: #c2d2ea;
+}
+
+.authDivider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  color: #8a99b3;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.authDivider::before,
+.authDivider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #e3eaf4;
+}
+
+.authForm {
+  display: grid;
+  gap: 14px;
+}
+
+.authForm label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #2a3a5a;
+}
+
+.authInputRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #d9e1ec;
+  background: #fbfdff;
+  border-radius: 12px;
+  padding: 0 12px;
+}
+
+.authInputRow svg {
+  color: #8a99b3;
+  flex-shrink: 0;
+}
+
+.authInputRow input {
+  border: 0;
+  background: transparent;
+  padding: 12px 0;
+  font-weight: 500;
+}
+
+.authInputRow input:focus {
+  outline: none;
+}
+
+.authMessage {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.authMessage.error {
+  background: #ffe9e9;
+  color: #a51d1d;
+}
+
+.authMessage.info {
+  background: #e8f1ff;
+  color: #1d5fd0;
+}
+
+.authSubmit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.authSwitch {
+  text-align: center;
+  margin-top: 18px;
+  font-size: 14px;
+  color: #4a5b7a;
+}
+
+.linkBtn {
+  background: none;
+  border: 0;
+  color: #1d5fd0;
+  font-weight: 700;
+  padding: 0;
+  cursor: pointer;
+  font-size: inherit;
+}
+
+.linkBtn:hover {
+  text-decoration: underline;
+}
+
+.authPre {
+  background: #0f1a30;
+  color: #d8e6ff;
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* =========================================================================
+   Session bar (sign-out + sync status, top of hero)
+   ========================================================================= */
+.sessionBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.sessionEmail {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #d8e6ff;
+  opacity: 0.9;
+}
+
+.syncBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.13);
+  color: #d8e6ff;
+}
+
+.syncBadge.offline {
+  background: rgba(255, 233, 233, 0.2);
+  color: #ffd1d1;
+}
+
+.signOutBtn {
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.13);
+  color: #ffffff;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.signOutBtn:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.migratePrompt {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: #fff8e1;
+  border: 1px solid #f3e0a3;
+  color: #6b5400;
+  padding: 12px 16px;
+  border-radius: 14px;
+  margin: 16px 0;
+  font-size: 14px;
+}
+
+.migratePrompt button {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
+@media (max-width: 520px) {
+  .authCard {
+    padding: 22px;
+  }
+  .sessionBar {
+    flex-wrap: wrap;
+  }
+  .signOutBtn {
+    margin-left: 0;
+  }
+}

@@ -1,7 +1,14 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { CalendarDays, Bus, MapPin, Clock, Trash2, Plus, Search, Calendar, List, ChevronLeft, ChevronRight, Users, Settings, Pencil } from "lucide-react";
+import {
+  CalendarDays, Bus, MapPin, Clock, Trash2, Plus, Search, Calendar,
+  List, ChevronLeft, ChevronRight, Users, Settings, Pencil, LogOut, Cloud, CloudOff,
+} from "lucide-react";
 import "./styles.css";
+import { supabase } from "./supabaseClient.js";
+import { useAuth } from "./auth/useAuth.js";
+import AuthGate from "./auth/AuthGate.jsx";
+import { useCloudCollection } from "./data/useCloudCollection.js";
 
 const emptyForm = {
   customerName: "",
@@ -18,66 +25,56 @@ const emptyForm = {
   status: "Scheduled",
 };
 
-function loadTrips() {
-  try {
-    return JSON.parse(localStorage.getItem("bus_trips")) || [];
-  } catch {
-    return [];
-  }
-}
-
-function saveTrips(trips) {
-  localStorage.setItem("bus_trips", JSON.stringify(trips));
-}
-
-function loadDrivers() {
-  try {
-    return JSON.parse(localStorage.getItem("bus_drivers")) || [];
-  } catch {
-    return [];
-  }
-}
-
-function saveDrivers(drivers) {
-  localStorage.setItem("bus_drivers", JSON.stringify(drivers));
-}
-
-function loadVehicles() {
-  try {
-    const stored = JSON.parse(localStorage.getItem("bus_vehicles"));
-    if (stored && stored.length > 0) return stored;
-  } catch {}
-  const defaults = [
-    { id: crypto.randomUUID(), name: "Mini Bus" },
-    { id: crypto.randomUUID(), name: "Coach" },
-    { id: crypto.randomUUID(), name: "Double Decker" },
-    { id: crypto.randomUUID(), name: "Accessible Bus" },
-    { id: crypto.randomUUID(), name: "Van" },
-  ];
-  localStorage.setItem("bus_vehicles", JSON.stringify(defaults));
-  return defaults;
-}
-
-function saveVehicles(vehicles) {
-  localStorage.setItem("bus_vehicles", JSON.stringify(vehicles));
-}
+const DEFAULT_VEHICLE_NAMES = [
+  "Mini Bus",
+  "Coach",
+  "Double Decker",
+  "Accessible Bus",
+  "Van",
+];
 
 function toDateTime(date, time) {
   if (!date || !time) return null;
   return new Date(`${date}T${time}`);
 }
 
-function App() {
+// ---------- Top-level: gate the whole app on auth ---------------------------
+
+function Root() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <main className="authPage">
+        <div className="authCard">
+          <p style={{ margin: 0, color: "#697792" }}>Loading…</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!user) return <AuthGate />;
+
+  return <App user={user} />;
+}
+
+// ---------- The original app, rewired to the cloud --------------------------
+
+function App({ user }) {
   const [form, setForm] = useState(emptyForm);
-  const [trips, setTrips] = useState(loadTrips);
+  const [trips, setTrips, tripsMeta] = useCloudCollection("trips", user);
+  const [drivers, setDrivers, driversMeta] = useCloudCollection("drivers", user);
+  const [vehicles, setVehicles, vehiclesMeta] = useCloudCollection("vehicles", user);
+
   const [search, setSearch] = useState("");
-  const [viewMode, setViewMode] = useState(() => localStorage.getItem('bus_viewMode') || 'list');
+  const [viewMode, setViewMode] = useState(
+    () => localStorage.getItem("bus_viewMode") || "list"
+  );
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [selectedDayData, setSelectedDayData] = useState(null);
 
   // Driver management state
-  const [drivers, setDrivers] = useState(loadDrivers);
   const [newDriverName, setNewDriverName] = useState("");
   const [driverFilter, setDriverFilter] = useState("");
   const [showManageDrivers, setShowManageDrivers] = useState(false);
@@ -85,15 +82,109 @@ function App() {
   const [editingDriverName, setEditingDriverName] = useState("");
 
   // Vehicle management state
-  const [vehicles, setVehicles] = useState(loadVehicles);
   const [showManageVehicles, setShowManageVehicles] = useState(false);
   const [newVehicleName, setNewVehicleName] = useState("");
   const [editingVehicleId, setEditingVehicleId] = useState(null);
   const [editingVehicleName, setEditingVehicleName] = useState("");
 
+  // Online/offline indicator
+  const [isOnline, setIsOnline] = useState(
+    typeof navigator !== "undefined" ? navigator.onLine : true
+  );
+  useEffect(() => {
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+
+  // Seed default vehicles for new accounts (only once everything has loaded
+  // and we've confirmed the user truly has zero vehicles in the cloud).
+  useEffect(() => {
+    if (vehiclesMeta.status !== "ready") return;
+    if (vehicles.length > 0) return;
+    const defaults = DEFAULT_VEHICLE_NAMES.map((name) => ({
+      id: crypto.randomUUID(),
+      name,
+    }));
+    setVehicles(defaults);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehiclesMeta.status]);
+
+  // One-time migration: if this device has legacy localStorage data from the
+  // pre-cloud version, push it up to the user's cloud (once trips is ready
+  // and empty, so we don't clobber anything).
+  const [migrateState, setMigrateState] = useState("idle"); // idle | available | running | done
+  useEffect(() => {
+    if (tripsMeta.status !== "ready" || driversMeta.status !== "ready" || vehiclesMeta.status !== "ready") return;
+    const hasLegacy =
+      !!localStorage.getItem("bus_trips") ||
+      !!localStorage.getItem("bus_drivers");
+    if (hasLegacy && migrateState === "idle") setMigrateState("available");
+  }, [tripsMeta.status, driversMeta.status, vehiclesMeta.status, migrateState]);
+
+  function runMigration() {
+    setMigrateState("running");
+    try {
+      const legacyTrips = JSON.parse(localStorage.getItem("bus_trips") || "[]");
+      const legacyDrivers = JSON.parse(localStorage.getItem("bus_drivers") || "[]");
+      const legacyVehicles = JSON.parse(localStorage.getItem("bus_vehicles") || "[]");
+
+      // Avoid duplicates by name where reasonable
+      const existingDriverNames = new Set(drivers.map((d) => d.name.toLowerCase()));
+      const driversToAdd = legacyDrivers
+        .filter((d) => d?.name && !existingDriverNames.has(d.name.toLowerCase()))
+        .map((d) => ({ id: crypto.randomUUID(), name: d.name }));
+      if (driversToAdd.length > 0) setDrivers([...drivers, ...driversToAdd]);
+
+      const existingVehicleNames = new Set(vehicles.map((v) => v.name.toLowerCase()));
+      const vehiclesToAdd = legacyVehicles
+        .filter((v) => v?.name && !existingVehicleNames.has(v.name.toLowerCase()))
+        .map((v) => ({ id: crypto.randomUUID(), name: v.name }));
+      if (vehiclesToAdd.length > 0) setVehicles([...vehicles, ...vehiclesToAdd]);
+
+      const tripsToAdd = legacyTrips.map((t) => ({
+        ...t,
+        id: t.id || crypto.randomUUID(),
+        createdAt: t.createdAt || new Date().toISOString(),
+      }));
+      if (tripsToAdd.length > 0) setTrips([...trips, ...tripsToAdd]);
+
+      // Clear legacy keys so we don't prompt again. (Keep bus_viewMode — that's
+      // a per-device UI preference, not synced.)
+      localStorage.removeItem("bus_trips");
+      localStorage.removeItem("bus_drivers");
+      localStorage.removeItem("bus_vehicles");
+      setMigrateState("done");
+    } catch (err) {
+      console.warn("migration failed", err);
+      setMigrateState("done");
+    }
+  }
+
+  function dismissMigration() {
+    localStorage.removeItem("bus_trips");
+    localStorage.removeItem("bus_drivers");
+    localStorage.removeItem("bus_vehicles");
+    setMigrateState("done");
+  }
+
+  // ---- Derived state ------------------------------------------------------
+
   const isCurrentSelectionAvailable = useMemo(() => {
     if (!form.vehicleType || !form.pickupDate || !form.returnDate) return null;
-    return isVehicleAvailable(form.vehicleType, form.pickupDate, form.pickupTime, form.returnDate, form.returnTime);
+    return isVehicleAvailable(
+      form.vehicleType,
+      form.pickupDate,
+      form.pickupTime,
+      form.returnDate,
+      form.returnTime
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.vehicleType, form.pickupDate, form.pickupTime, form.returnDate, form.returnTime, trips]);
 
   const filteredTrips = useMemo(() => {
@@ -123,6 +214,8 @@ function App() {
       });
   }, [trips, search, driverFilter]);
 
+  // ---- Mutations ----------------------------------------------------------
+
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
   }
@@ -143,7 +236,6 @@ function App() {
       return;
     }
 
-    // Check vehicle availability
     if (!isVehicleAvailable(form.vehicleType, form.pickupDate, form.pickupTime, form.returnDate, form.returnTime)) {
       alert(`${form.vehicleType} is not available for the selected dates. Please choose different dates or another vehicle type.`);
       return;
@@ -155,22 +247,17 @@ function App() {
       createdAt: new Date().toISOString(),
     };
 
-    const nextTrips = [...trips, newTrip];
-    setTrips(nextTrips);
-    saveTrips(nextTrips);
+    setTrips([...trips, newTrip]);
     setForm(emptyForm);
   }
 
   function deleteTrip(id) {
-    const nextTrips = trips.filter((trip) => trip.id !== id);
-    setTrips(nextTrips);
-    saveTrips(nextTrips);
+    setTrips(trips.filter((trip) => trip.id !== id));
   }
 
   function clearAll() {
     if (!confirm("Delete all schedules?")) return;
     setTrips([]);
-    saveTrips([]);
   }
 
   function addDriver() {
@@ -184,9 +271,7 @@ function App() {
       return;
     }
     const newDriver = { id: crypto.randomUUID(), name };
-    const next = [...drivers, newDriver];
-    setDrivers(next);
-    saveDrivers(next);
+    setDrivers([...drivers, newDriver]);
     setNewDriverName("");
     updateField("driverName", name);
   }
@@ -212,20 +297,12 @@ function App() {
       return;
     }
     const oldName = oldDriver.name;
-    const updatedDrivers = drivers.map((d) =>
-      d.id === editingDriverId ? { ...d, name } : d
-    );
-    setDrivers(updatedDrivers);
-    saveDrivers(updatedDrivers);
+    setDrivers(drivers.map((d) => (d.id === editingDriverId ? { ...d, name } : d)));
     if (oldName !== name) {
-      const updatedTrips = trips.map((t) =>
-        t.driverName === oldName ? { ...t, driverName: name } : t
+      setTrips(
+        trips.map((t) => (t.driverName === oldName ? { ...t, driverName: name } : t))
       );
-      setTrips(updatedTrips);
-      saveTrips(updatedTrips);
-      if (form.driverName === oldName) {
-        updateField("driverName", name);
-      }
+      if (form.driverName === oldName) updateField("driverName", name);
     }
     setEditingDriverId(null);
     setEditingDriverName("");
@@ -245,12 +322,8 @@ function App() {
         ? `"${driver.name}" is assigned to ${driverTrips.length} trip(s). Delete anyway?`
         : `Delete driver "${driver.name}"?`;
     if (!confirm(message)) return;
-    const next = drivers.filter((d) => d.id !== id);
-    setDrivers(next);
-    saveDrivers(next);
-    if (form.driverName === driver.name) {
-      updateField("driverName", "");
-    }
+    setDrivers(drivers.filter((d) => d.id !== id));
+    if (form.driverName === driver.name) updateField("driverName", "");
   }
 
   function addVehicle() {
@@ -264,9 +337,7 @@ function App() {
       return;
     }
     const newVehicle = { id: crypto.randomUUID(), name };
-    const next = [...vehicles, newVehicle];
-    setVehicles(next);
-    saveVehicles(next);
+    setVehicles([...vehicles, newVehicle]);
     setNewVehicleName("");
   }
 
@@ -291,20 +362,14 @@ function App() {
       return;
     }
     const oldName = oldVehicle.name;
-    const updatedVehicles = vehicles.map((v) =>
-      v.id === editingVehicleId ? { ...v, name } : v
+    setVehicles(
+      vehicles.map((v) => (v.id === editingVehicleId ? { ...v, name } : v))
     );
-    setVehicles(updatedVehicles);
-    saveVehicles(updatedVehicles);
     if (oldName !== name) {
-      const updatedTrips = trips.map((t) =>
-        t.vehicleType === oldName ? { ...t, vehicleType: name } : t
+      setTrips(
+        trips.map((t) => (t.vehicleType === oldName ? { ...t, vehicleType: name } : t))
       );
-      setTrips(updatedTrips);
-      saveTrips(updatedTrips);
-      if (form.vehicleType === oldName) {
-        updateField("vehicleType", name);
-      }
+      if (form.vehicleType === oldName) updateField("vehicleType", name);
     }
     setEditingVehicleId(null);
     setEditingVehicleName("");
@@ -316,12 +381,15 @@ function App() {
   }
 
   function deleteVehicle(id) {
-    const next = vehicles.filter((v) => v.id !== id);
-    setVehicles(next);
-    saveVehicles(next);
+    setVehicles(vehicles.filter((v) => v.id !== id));
   }
 
-  // Calendar helper functions
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+  }
+
+  // ---- Calendar / availability helpers ------------------------------------
+
   function getDaysInMonth(date) {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   }
@@ -331,14 +399,13 @@ function App() {
   }
 
   function formatDateForComparison(date) {
-    return date.toISOString().split('T')[0];
+    return date.toISOString().split("T")[0];
   }
 
   function getDateRange(startDate, endDate) {
     const dates = [];
     const current = new Date(startDate);
     const end = new Date(endDate);
-    
     while (current <= end) {
       dates.push(formatDateForComparison(current));
       current.setDate(current.getDate() + 1);
@@ -347,31 +414,26 @@ function App() {
   }
 
   function getTripsForDate(dateStr) {
-    return filteredTrips.filter(trip => {
+    return filteredTrips.filter((trip) => {
       const tripDates = getDateRange(trip.pickupDate, trip.returnDate || trip.dropoffDate);
       return tripDates.includes(dateStr);
     });
   }
 
   function isVehicleAvailable(vehicleType, pickupDate, pickupTime, returnDate, returnTime, excludeTripId = null) {
-    const reqStart = toDateTime(pickupDate, pickupTime || '00:00');
-    const reqEnd = toDateTime(returnDate, returnTime || '23:59');
-
+    const reqStart = toDateTime(pickupDate, pickupTime || "00:00");
+    const reqEnd = toDateTime(returnDate, returnTime || "23:59");
     if (!reqStart || !reqEnd) return true;
 
-    return !trips.some(trip => {
+    return !trips.some((trip) => {
       if (trip.id === excludeTripId) return false;
       if (trip.vehicleType !== vehicleType) return false;
-
-      const tripStart = toDateTime(trip.pickupDate, trip.pickupTime || '00:00');
+      const tripStart = toDateTime(trip.pickupDate, trip.pickupTime || "00:00");
       const tripEnd = toDateTime(
         trip.returnDate || trip.dropoffDate,
-        trip.returnTime || trip.dropoffTime || '23:59'
+        trip.returnTime || trip.dropoffTime || "23:59"
       );
-
       if (!tripStart || !tripEnd) return false;
-
-      // Ranges overlap if start1 < end2 AND end1 > start2
       return reqStart < tripEnd && reqEnd > tripStart;
     });
   }
@@ -382,26 +444,31 @@ function App() {
     setCurrentDate(newDate);
   }
 
-  function openTripModal(trip) {
-    setSelectedTrip(trip);
-  }
+  function openTripModal(trip) { setSelectedTrip(trip); }
+  function closeTripModal() { setSelectedTrip(null); }
+  function openDayModal(dateStr, dayTrips) { setSelectedDayData({ dateStr, trips: dayTrips }); }
+  function closeDayModal() { setSelectedDayData(null); }
 
-  function closeTripModal() {
-    setSelectedTrip(null);
-  }
-
-  function openDayModal(dateStr, dayTrips) {
-    setSelectedDayData({ dateStr, trips: dayTrips });
-  }
-
-  function closeDayModal() {
-    setSelectedDayData(null);
-  }
+  // ---- Render -------------------------------------------------------------
 
   return (
     <main className="page">
       <section className="hero">
         <div>
+          <div className="sessionBar">
+            <span className="sessionEmail">
+              Signed in as <strong style={{ marginLeft: 4 }}>{user.email || user.id}</strong>
+            </span>
+            <span className={`syncBadge ${isOnline ? "" : "offline"}`}>
+              {isOnline ? <Cloud size={14} /> : <CloudOff size={14} />}
+              {isOnline ? "Synced" : "Offline — will sync when online"}
+            </span>
+            <button className="signOutBtn" onClick={handleSignOut}>
+              <LogOut size={14} style={{ verticalAlign: "-2px", marginRight: 4 }} />
+              Sign out
+            </button>
+          </div>
+
           <p className="eyebrow">Priority Transfers</p>
           <h1>Vehicle Scheduling App</h1>
           <p className="subtitle">
@@ -414,6 +481,19 @@ function App() {
           <span>Total trips</span>
         </div>
       </section>
+
+      {migrateState === "available" && (
+        <div className="migratePrompt">
+          <span>
+            We found schedules saved on this device from the offline version.
+            Move them into your cloud account?
+          </span>
+          <span style={{ display: "flex", gap: 8 }}>
+            <button className="primary" onClick={runMigration}>Import</button>
+            <button className="iconButton" onClick={dismissMigration}>Dismiss</button>
+          </span>
+        </div>
+      )}
 
       <section className="grid">
         <form className="card form" onSubmit={addTrip}>
@@ -539,23 +619,23 @@ function App() {
             <h2><Bus size={20} /> Schedules</h2>
             <div className="viewControls">
               <div className="viewToggle">
-                <button 
-                  className={`toggleButton ${viewMode === 'list' ? 'active' : ''}`}
-                  onClick={() => { setViewMode('list'); localStorage.setItem('bus_viewMode', 'list'); }}
+                <button
+                  className={`toggleButton ${viewMode === "list" ? "active" : ""}`}
+                  onClick={() => { setViewMode("list"); localStorage.setItem("bus_viewMode", "list"); }}
                 >
                   <List size={18} />
                   List
                 </button>
-                <button 
-                  className={`toggleButton ${viewMode === 'calendar' ? 'active' : ''}`}
-                  onClick={() => { setViewMode('calendar'); localStorage.setItem('bus_viewMode', 'calendar'); }}
+                <button
+                  className={`toggleButton ${viewMode === "calendar" ? "active" : ""}`}
+                  onClick={() => { setViewMode("calendar"); localStorage.setItem("bus_viewMode", "calendar"); }}
                 >
                   <Calendar size={18} />
                   Calendar
                 </button>
                 <button
-                  className={`toggleButton ${viewMode === 'drivers' ? 'active' : ''}`}
-                  onClick={() => { setViewMode('drivers'); localStorage.setItem('bus_viewMode', 'drivers'); }}
+                  className={`toggleButton ${viewMode === "drivers" ? "active" : ""}`}
+                  onClick={() => { setViewMode("drivers"); localStorage.setItem("bus_viewMode", "drivers"); }}
                 >
                   <Users size={18} />
                   Drivers
@@ -570,7 +650,7 @@ function App() {
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search schedules..." />
           </div>
 
-          {drivers.length > 0 && viewMode !== 'drivers' && (
+          {drivers.length > 0 && viewMode !== "drivers" && (
             <div className="driverFilter">
               <Users size={16} />
               <select
@@ -585,23 +665,23 @@ function App() {
             </div>
           )}
 
-          {viewMode === 'calendar' && (
+          {viewMode === "calendar" && (
             <div className="calendarView">
               <div className="calendarHeader">
                 <button className="navButton" onClick={() => navigateMonth(-1)}>
                   <ChevronLeft size={20} />
                 </button>
                 <h3>
-                  {currentDate.toLocaleDateString('en-US', { 
-                    month: 'long', 
-                    year: 'numeric' 
+                  {currentDate.toLocaleDateString("en-US", {
+                    month: "long",
+                    year: "numeric",
                   })}
                 </h3>
                 <button className="navButton" onClick={() => navigateMonth(1)}>
                   <ChevronRight size={20} />
                 </button>
               </div>
-              
+
               <div className="calendarGrid">
                 <div className="dayHeader">Sun</div>
                 <div className="dayHeader">Mon</div>
@@ -610,39 +690,37 @@ function App() {
                 <div className="dayHeader">Thu</div>
                 <div className="dayHeader">Fri</div>
                 <div className="dayHeader">Sat</div>
-                
+
                 {Array.from({ length: getFirstDayOfMonth(currentDate) }).map((_, i) => (
                   <div key={`empty-${i}`} className="calendarDay empty"></div>
                 ))}
-                
+
                 {Array.from({ length: getDaysInMonth(currentDate) }).map((_, i) => {
                   const dayNumber = i + 1;
-                  const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`;
+                  const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}-${String(dayNumber).padStart(2, "0")}`;
                   const dayTrips = getTripsForDate(dateStr);
                   const isToday = dateStr === formatDateForComparison(new Date());
-                  
+
                   return (
-                    <div key={dayNumber} className={`calendarDay ${isToday ? 'today' : ''}`}>
+                    <div key={dayNumber} className={`calendarDay ${isToday ? "today" : ""}`}>
                       <span className="dayNumber">{dayNumber}</span>
                       {dayTrips.length > 0 && (
                         <div className="dayTrips">
                           {dayTrips.slice(0, 2).map((trip) => {
                             const isPickupDay = trip.pickupDate === dateStr;
                             const isReturnDay = (trip.returnDate || trip.dropoffDate) === dateStr;
-                            const isMiddleDay = !isPickupDay && !isReturnDay;
-                            
                             return (
-                              <div 
-                                key={trip.id} 
+                              <div
+                                key={trip.id}
                                 className={`tripIndicator ${trip.status.toLowerCase().replace(" ", "-")} ${
-                                  isPickupDay ? 'pickup-day' : isReturnDay ? 'return-day' : 'middle-day'
+                                  isPickupDay ? "pickup-day" : isReturnDay ? "return-day" : "middle-day"
                                 }`}
                                 onClick={() => openTripModal(trip)}
                               >
                                 <span className="tripTime">
-                                  {isPickupDay ? `↗ ${trip.pickupTime}` : 
-                                   isReturnDay ? `↙ ${trip.returnTime || trip.dropoffTime}` : 
-                                   '━━━'}
+                                  {isPickupDay ? `↗ ${trip.pickupTime}` :
+                                   isReturnDay ? `↙ ${trip.returnTime || trip.dropoffTime}` :
+                                   "━━━"}
                                 </span>
                                 <span className="tripCustomer">{trip.customerName}</span>
                               </div>
@@ -662,7 +740,7 @@ function App() {
             </div>
           )}
 
-          {viewMode === 'list' && (
+          {viewMode === "list" && (
             <>
               {filteredTrips.length === 0 ? (
                 <div className="empty">No schedules yet.</div>
@@ -696,7 +774,7 @@ function App() {
             </>
           )}
 
-          {viewMode === 'drivers' && (
+          {viewMode === "drivers" && (
             <div className="driversView">
               {drivers.length === 0 ? (
                 <div className="empty">No drivers yet. Use the form on the left to add a driver.</div>
@@ -717,7 +795,7 @@ function App() {
                           {driver.name}
                         </div>
                         <span className="driverTripCount">
-                          {driverTrips.length} booking{driverTrips.length !== 1 ? 's' : ''}
+                          {driverTrips.length} booking{driverTrips.length !== 1 ? "s" : ""}
                         </span>
                       </div>
                       {driverTrips.length === 0 ? (
@@ -725,7 +803,7 @@ function App() {
                       ) : (
                         <div className="tripList">
                           {driverTrips.map((trip) => (
-                            <article className="trip" key={trip.id} style={{ cursor: 'pointer' }} onClick={() => openTripModal(trip)}>
+                            <article className="trip" key={trip.id} style={{ cursor: "pointer" }} onClick={() => openTripModal(trip)}>
                               <div className="tripTop">
                                 <div>
                                   <h3>{trip.customerName}</h3>
@@ -757,18 +835,13 @@ function App() {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Trip Details</h2>
-              <button className="modal-close" onClick={closeTripModal}>
-                ×
-              </button>
+              <button className="modal-close" onClick={closeTripModal}>×</button>
             </div>
-            
             <div className="modal-body">
               <div className="trip-detail-card">
                 <div className="trip-detail-header">
                   <h3>{selectedTrip.customerName}</h3>
-                  <span className={`badge ${selectedTrip.status.toLowerCase().replace(" ", "-")}`}>
-                    {selectedTrip.status}
-                  </span>
+                  <span className={`badge ${selectedTrip.status.toLowerCase().replace(" ", "-")}`}>{selectedTrip.status}</span>
                 </div>
 
                 <div className="trip-details-grid">
@@ -794,9 +867,7 @@ function App() {
                     <Clock size={16} />
                     <div>
                       <span className="detail-label">Pickup</span>
-                      <span className="detail-value">
-                        {selectedTrip.pickupDate} at {selectedTrip.pickupTime}
-                      </span>
+                      <span className="detail-value">{selectedTrip.pickupDate} at {selectedTrip.pickupTime}</span>
                     </div>
                   </div>
 
@@ -804,9 +875,7 @@ function App() {
                     <Clock size={16} />
                     <div>
                       <span className="detail-label">Return</span>
-                      <span className="detail-value">
-                        {selectedTrip.returnDate || selectedTrip.dropoffDate} at {selectedTrip.returnTime || selectedTrip.dropoffTime}
-                      </span>
+                      <span className="detail-value">{selectedTrip.returnDate || selectedTrip.dropoffDate} at {selectedTrip.returnTime || selectedTrip.dropoffTime}</span>
                     </div>
                   </div>
 
@@ -814,9 +883,7 @@ function App() {
                     <MapPin size={16} />
                     <div>
                       <span className="detail-label">Route</span>
-                      <span className="detail-value">
-                        {selectedTrip.pickupLocation} → {selectedTrip.dropoffLocation}
-                      </span>
+                      <span className="detail-value">{selectedTrip.pickupLocation} → {selectedTrip.dropoffLocation}</span>
                     </div>
                   </div>
 
@@ -842,32 +909,28 @@ function App() {
                 </div>
 
                 <div className="modal-actions">
-                  <button className="danger" onClick={() => {
-                    deleteTrip(selectedTrip.id);
-                    closeTripModal();
-                  }}>
+                  <button className="danger" onClick={() => { deleteTrip(selectedTrip.id); closeTripModal(); }}>
                     <Trash2 size={16} />
                     Delete Trip
                   </button>
-                  <button className="secondary" onClick={closeTripModal}>
-                    Close
-                  </button>
+                  <button className="secondary" onClick={closeTripModal}>Close</button>
                 </div>
               </div>
             </div>
           </div>
         </div>
       )}
+
       {/* Day Overview Modal */}
       {selectedDayData && (
         <div className="modal-overlay" onClick={closeDayModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>
-                {new Date(selectedDayData.dateStr + 'T12:00:00').toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  month: 'long',
-                  day: 'numeric',
+                {new Date(selectedDayData.dateStr + "T12:00:00").toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
                 })}
               </h2>
               <button className="modal-close" onClick={closeDayModal}>×</button>
@@ -878,13 +941,13 @@ function App() {
                   <article
                     className="trip"
                     key={trip.id}
-                    style={{ cursor: 'pointer' }}
+                    style={{ cursor: "pointer" }}
                     onClick={() => { closeDayModal(); openTripModal(trip); }}
                   >
                     <div className="tripTop">
                       <div>
                         <h3>{trip.customerName}</h3>
-                        <span className={`badge ${trip.status.toLowerCase().replace(' ', '-')}`}>{trip.status}</span>
+                        <span className={`badge ${trip.status.toLowerCase().replace(" ", "-")}`}>{trip.status}</span>
                       </div>
                     </div>
                     <div className="details">
@@ -900,6 +963,7 @@ function App() {
           </div>
         </div>
       )}
+
       {/* Manage Vehicles Modal */}
       {showManageVehicles && (
         <div className="modal-overlay" onClick={() => { setShowManageVehicles(false); cancelEditVehicle(); setNewVehicleName(""); }}>
@@ -921,8 +985,8 @@ function App() {
                             value={editingVehicleName}
                             onChange={(e) => setEditingVehicleName(e.target.value)}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') { e.preventDefault(); saveEditVehicle(); }
-                              if (e.key === 'Escape') cancelEditVehicle();
+                              if (e.key === "Enter") { e.preventDefault(); saveEditVehicle(); }
+                              if (e.key === "Escape") cancelEditVehicle();
                             }}
                             autoFocus
                           />
@@ -946,14 +1010,12 @@ function App() {
                   ))
                 )}
               </div>
-              <div className="addDriverRow" style={{ marginTop: '16px', borderTop: '1px solid #f0f4f8', paddingTop: '16px' }}>
+              <div className="addDriverRow" style={{ marginTop: "16px", borderTop: "1px solid #f0f4f8", paddingTop: "16px" }}>
                 <input
                   value={newVehicleName}
                   onChange={(e) => setNewVehicleName(e.target.value)}
                   placeholder="New vehicle name"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') { e.preventDefault(); addVehicle(); }
-                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addVehicle(); } }}
                 />
                 <button type="button" className="primary" onClick={addVehicle}>Add</button>
               </div>
@@ -961,6 +1023,7 @@ function App() {
           </div>
         </div>
       )}
+
       {/* Manage Drivers Modal */}
       {showManageDrivers && (
         <div className="modal-overlay" onClick={() => { setShowManageDrivers(false); cancelEditDriver(); setNewDriverName(""); }}>
@@ -982,8 +1045,8 @@ function App() {
                             value={editingDriverName}
                             onChange={(e) => setEditingDriverName(e.target.value)}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') { e.preventDefault(); saveEditDriver(); }
-                              if (e.key === 'Escape') cancelEditDriver();
+                              if (e.key === "Enter") { e.preventDefault(); saveEditDriver(); }
+                              if (e.key === "Escape") cancelEditDriver();
                             }}
                             autoFocus
                           />
@@ -1007,14 +1070,12 @@ function App() {
                   ))
                 )}
               </div>
-              <div className="addDriverRow" style={{ marginTop: '16px', borderTop: '1px solid #f0f4f8', paddingTop: '16px' }}>
+              <div className="addDriverRow" style={{ marginTop: "16px", borderTop: "1px solid #f0f4f8", paddingTop: "16px" }}>
                 <input
                   value={newDriverName}
                   onChange={(e) => setNewDriverName(e.target.value)}
                   placeholder="New driver name"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') { e.preventDefault(); addDriver(); }
-                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDriver(); } }}
                 />
                 <button type="button" className="primary" onClick={addDriver}>Add</button>
               </div>
@@ -1026,4 +1087,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(<Root />);
