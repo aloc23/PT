@@ -21,40 +21,53 @@ body {
 .hero {
   display: flex;
   justify-content: space-between;
-  gap: 24px;
+  gap: 28px;
   align-items: stretch;
-  background: linear-gradient(135deg, #12213b, #234f87);
+  background: linear-gradient(142deg, #11213b 0%, #1f4a80 58%, #2f66aa 100%);
   color: white;
-  padding: 32px;
+  padding: 30px 32px;
   border-radius: 28px;
-  box-shadow: 0 22px 60px rgba(28, 54, 96, 0.25);
+  box-shadow: 0 18px 44px rgba(17, 33, 59, 0.28);
+}
+
+.heroContent {
+  display: grid;
+  gap: 10px;
+  flex: 1;
+  max-width: 760px;
 }
 
 .eyebrow {
-  margin: 0 0 8px;
+  margin: 2px 0 4px;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 12px;
-  opacity: 0.8;
+  letter-spacing: 0.14em;
+  font-size: 11px;
+  font-weight: 700;
+  color: #c4d9ff;
+  opacity: 0.95;
 }
 
-h1 {
+.hero h1 {
   margin: 0;
-  font-size: clamp(34px, 6vw, 58px);
-  line-height: 1;
+  font-size: clamp(34px, 5.3vw, 56px);
+  line-height: 0.98;
+  letter-spacing: -0.02em;
+  max-width: 16ch;
 }
 
 .subtitle {
-  max-width: 650px;
-  margin: 16px 0 0;
-  color: #d8e6ff;
-  font-size: 18px;
+  max-width: 58ch;
+  margin: 6px 0 0;
+  color: #dbe8ff;
+  font-size: clamp(16px, 2.5vw, 19px);
+  line-height: 1.45;
+  font-weight: 500;
 }
 
 .heroCard {
   min-width: 160px;
-  background: rgba(255, 255, 255, 0.13);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 24px;
   padding: 22px;
   display: grid;
@@ -276,6 +289,20 @@ button:disabled {
     flex-direction: column;
   }
 
+  .hero {
+    gap: 20px;
+    padding: 24px;
+  }
+
+  .heroCard {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: auto auto;
+    justify-content: start;
+    gap: 10px;
+    text-align: left;
+  }
+
   .grid {
     grid-template-columns: 1fr;
   }
@@ -295,6 +322,46 @@ button:disabled {
   .card {
     padding: 18px;
     border-radius: 20px;
+  }
+
+  .hero {
+    gap: 16px;
+  }
+
+  .heroContent {
+    gap: 8px;
+  }
+
+  .eyebrow {
+    font-size: 10px;
+    letter-spacing: 0.13em;
+  }
+
+  .hero h1 {
+    font-size: clamp(30px, 9vw, 40px);
+  }
+
+  .subtitle {
+    font-size: 15px;
+  }
+
+  .sessionBar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .sessionEmail,
+  .syncBadge,
+  .signOutBtn {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .sessionEmailValue {
+    max-width: 100%;
   }
 }
 
@@ -1134,17 +1201,38 @@ button:disabled {
 .sessionBar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
 .sessionEmail {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
-  color: #d8e6ff;
+  min-height: 36px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #dbe8ff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.sessionEmailLabel {
   opacity: 0.9;
+}
+
+.sessionEmailValue {
+  margin-left: 2px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  max-width: min(40vw, 260px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .syncBadge {
@@ -1153,29 +1241,52 @@ button:disabled {
   gap: 6px;
   font-size: 12px;
   font-weight: 700;
-  padding: 4px 10px;
+  min-height: 36px;
+  padding: 7px 12px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.13);
-  color: #d8e6ff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #deebff;
 }
 
 .syncBadge.offline {
-  background: rgba(255, 233, 233, 0.2);
-  color: #ffd1d1;
+  background: rgba(229, 74, 74, 0.2);
+  border-color: rgba(255, 188, 188, 0.34);
+  color: #ffe1e1;
 }
 
 .signOutBtn {
   margin-left: auto;
-  background: rgba(255, 255, 255, 0.13);
+  min-height: 36px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: #ffffff;
-  padding: 8px 14px;
-  border-radius: 10px;
-  font-size: 13px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-size: 12px;
   font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.signOutIcon {
+  flex-shrink: 0;
 }
 
 .signOutBtn:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.signOutBtn:active {
+  transform: translateY(1px);
+}
+
+.signOutBtn:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
 }
 
 .migratePrompt {
@@ -1202,7 +1313,7 @@ button:disabled {
     padding: 22px;
   }
   .sessionBar {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
   .signOutBtn {
     margin-left: 0;

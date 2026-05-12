@@ -454,17 +454,18 @@ function App({ user }) {
   return (
     <main className="page">
       <section className="hero">
-        <div>
+        <div className="heroContent">
           <div className="sessionBar">
             <span className="sessionEmail">
-              Signed in as <strong style={{ marginLeft: 4 }}>{user.email || user.id}</strong>
+              <span className="sessionEmailLabel">Signed in as</span>
+              <strong className="sessionEmailValue">{user.email || user.id}</strong>
             </span>
             <span className={`syncBadge ${isOnline ? "" : "offline"}`}>
               {isOnline ? <Cloud size={14} /> : <CloudOff size={14} />}
               {isOnline ? "Synced" : "Offline — will sync when online"}
             </span>
             <button className="signOutBtn" onClick={handleSignOut}>
-              <LogOut size={14} style={{ verticalAlign: "-2px", marginRight: 4 }} />
+              <LogOut size={14} className="signOutIcon" />
               Sign out
             </button>
           </div>
