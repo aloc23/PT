@@ -105,6 +105,9 @@ function App({ user }) {
   const [editingVehicleId, setEditingVehicleId] = useState(null);
   const [editingVehicleName, setEditingVehicleName] = useState("");
 
+  // New Schedule form modal state
+  const [showNewScheduleForm, setShowNewScheduleForm] = useState(false);
+
   // Edit trip state
   const [isEditMode, setIsEditMode] = useState(false);
   const [editForm, setEditForm] = useState(emptyForm);
@@ -295,7 +298,13 @@ function App({ user }) {
 
     if (createTrip(form)) {
       setForm(emptyForm);
+      setShowNewScheduleForm(false);
     }
+  }
+
+  function closeNewScheduleForm() {
+    setShowNewScheduleForm(false);
+    setForm(emptyForm);
   }
 
   function createTrip(sourceForm) {
@@ -683,26 +692,14 @@ function App({ user }) {
       )}
 
       <section className="grid">
-        <form className="card form" onSubmit={addTrip}>
-          <h2><Plus size={20} /> New Schedule</h2>
-          <ScheduleFormFields
-            form={form}
-            updateField={updateField}
-            vehicles={vehicles}
-            drivers={drivers}
-            isSelectionAvailable={isCurrentSelectionAvailable}
-            isDriverSelectionAvailable={isCurrentDriverAvailable}
-            onManageVehicles={() => setShowManageVehicles(true)}
-            onManageDrivers={() => setShowManageDrivers(true)}
-          />
-
-          <button className="primary" type="submit">Add Schedule</button>
-        </form>
-
         <section className="card schedules">
           <div className="toolbar">
             <h2><Bus size={20} /> Schedules</h2>
             <div className="viewControls">
+              <button className="primary newScheduleBtn" onClick={() => setShowNewScheduleForm(true)}>
+                <Plus size={16} />
+                New Schedule
+              </button>
               <div className="viewToggle">
                 <button
                   className={`toggleButton ${viewMode === "list" ? "active" : ""}`}
@@ -1118,6 +1115,36 @@ function App({ user }) {
                   </article>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Schedule Modal */}
+      {showNewScheduleForm && (
+        <div className="modal-overlay" onClick={closeNewScheduleForm}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2><Plus size={20} /> New Schedule</h2>
+              <button className="modal-close" onClick={closeNewScheduleForm}>×</button>
+            </div>
+            <div className="modal-body">
+              <form className="form" onSubmit={addTrip}>
+                <ScheduleFormFields
+                  form={form}
+                  updateField={updateField}
+                  vehicles={vehicles}
+                  drivers={drivers}
+                  isSelectionAvailable={isCurrentSelectionAvailable}
+                  isDriverSelectionAvailable={isCurrentDriverAvailable}
+                  onManageVehicles={() => setShowManageVehicles(true)}
+                  onManageDrivers={() => setShowManageDrivers(true)}
+                />
+                <div className="modal-actions">
+                  <button className="primary" type="submit">Add Schedule</button>
+                  <button className="secondary" type="button" onClick={closeNewScheduleForm}>Cancel</button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
