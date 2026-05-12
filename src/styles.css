@@ -68,7 +68,7 @@ h1 {
 
 .grid {
   display: grid;
-  grid-template-columns: 420px 1fr;
+  grid-template-columns: 1fr;
   gap: 24px;
   margin-top: 24px;
 }
@@ -163,6 +163,13 @@ button:disabled {
 .primary {
   background: #1d5fd0;
   color: white;
+}
+
+.newScheduleBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
 }
 
 .danger {
@@ -274,10 +281,6 @@ button:disabled {
   .hero,
   .toolbar {
     flex-direction: column;
-  }
-
-  .grid {
-    grid-template-columns: 1fr;
   }
 }
 
