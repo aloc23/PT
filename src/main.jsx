@@ -33,6 +33,21 @@ const DEFAULT_VEHICLE_NAMES = [
   "Van",
 ];
 
+const MONTH_OPTIONS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
 function toDateTime(date, time) {
   if (!date || !time) return null;
   return new Date(`${date}T${time}`);
@@ -73,6 +88,8 @@ function App({ user }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [selectedDayData, setSelectedDayData] = useState(null);
+  const [quickAddDate, setQuickAddDate] = useState(null);
+  const [quickAddForm, setQuickAddForm] = useState(emptyForm);
 
   // Driver management state
   const [newDriverName, setNewDriverName] = useState("");
@@ -214,6 +231,30 @@ function App({ user }) {
       });
   }, [trips, search, driverFilter]);
 
+  const isQuickSelectionAvailable = useMemo(() => {
+    if (!quickAddForm.vehicleType || !quickAddForm.pickupDate || !quickAddForm.returnDate) return null;
+    return isVehicleAvailable(
+      quickAddForm.vehicleType,
+      quickAddForm.pickupDate,
+      quickAddForm.pickupTime,
+      quickAddForm.returnDate,
+      quickAddForm.returnTime
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    quickAddForm.vehicleType,
+    quickAddForm.pickupDate,
+    quickAddForm.pickupTime,
+    quickAddForm.returnDate,
+    quickAddForm.returnTime,
+    trips,
+  ]);
+
+  const yearOptions = useMemo(() => {
+    const year = new Date().getFullYear();
+    return Array.from({ length: 11 }, (_, i) => year - 5 + i);
+  }, []);
+
   // ---- Mutations ----------------------------------------------------------
 
   function updateField(field, value) {
@@ -223,32 +264,50 @@ function App({ user }) {
   function addTrip(event) {
     event.preventDefault();
 
-    const pickup = toDateTime(form.pickupDate, form.pickupTime);
-    const returnDateTime = toDateTime(form.returnDate, form.returnTime);
+    if (createTrip(form)) {
+      setForm(emptyForm);
+    }
+  }
 
-    if (!form.customerName || !form.pickupLocation || !form.dropoffLocation || !pickup || !returnDateTime) {
+  function createTrip(sourceForm) {
+    const pickup = toDateTime(sourceForm.pickupDate, sourceForm.pickupTime);
+    const returnDateTime = toDateTime(sourceForm.returnDate, sourceForm.returnTime);
+
+    if (!sourceForm.customerName || !sourceForm.pickupLocation || !sourceForm.dropoffLocation || !pickup || !returnDateTime) {
       alert("Please fill in customer, locations, pickup date/time, and return date/time.");
-      return;
+      return false;
     }
 
     if (returnDateTime <= pickup) {
       alert("Return date/time must be after pickup date/time.");
-      return;
+      return false;
     }
 
-    if (!isVehicleAvailable(form.vehicleType, form.pickupDate, form.pickupTime, form.returnDate, form.returnTime)) {
-      alert(`${form.vehicleType} is not available for the selected dates. Please choose different dates or another vehicle type.`);
-      return;
+    if (!isVehicleAvailable(sourceForm.vehicleType, sourceForm.pickupDate, sourceForm.pickupTime, sourceForm.returnDate, sourceForm.returnTime)) {
+      alert(`${sourceForm.vehicleType} is not available for the selected dates. Please choose different dates or another vehicle type.`);
+      return false;
     }
 
     const newTrip = {
-      ...form,
+      ...sourceForm,
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
     };
 
     setTrips([...trips, newTrip]);
-    setForm(emptyForm);
+    return true;
+  }
+
+  function addQuickTrip(event) {
+    event.preventDefault();
+    if (createTrip(quickAddForm)) {
+      setQuickAddDate(null);
+      setQuickAddForm(emptyForm);
+    }
+  }
+
+  function updateQuickField(field, value) {
+    setQuickAddForm((current) => ({ ...current, [field]: value }));
   }
 
   function deleteTrip(id) {
@@ -444,6 +503,36 @@ function App({ user }) {
     setCurrentDate(newDate);
   }
 
+  function jumpToMonth(monthIndex) {
+    const newDate = new Date(currentDate);
+    newDate.setMonth(monthIndex);
+    setCurrentDate(newDate);
+  }
+
+  function jumpToYear(year) {
+    const newDate = new Date(currentDate);
+    newDate.setFullYear(year);
+    setCurrentDate(newDate);
+  }
+
+  function goToToday() {
+    setCurrentDate(new Date());
+  }
+
+  function openQuickAddModal(dateStr) {
+    setQuickAddDate(dateStr);
+    setQuickAddForm({
+      ...emptyForm,
+      pickupDate: dateStr,
+      returnDate: dateStr,
+    });
+  }
+
+  function closeQuickAddModal() {
+    setQuickAddDate(null);
+    setQuickAddForm(emptyForm);
+  }
+
   function openTripModal(trip) { setSelectedTrip(trip); }
   function closeTripModal() { setSelectedTrip(null); }
   function openDayModal(dateStr, dayTrips) { setSelectedDayData({ dateStr, trips: dayTrips }); }
@@ -498,118 +587,15 @@ function App({ user }) {
       <section className="grid">
         <form className="card form" onSubmit={addTrip}>
           <h2><Plus size={20} /> New Schedule</h2>
-
-          <label>
-            Customer / Company Name
-            <input value={form.customerName} onChange={(e) => updateField("customerName", e.target.value)} placeholder="Example: Dublin Tours Ltd" />
-          </label>
-
-          <label>
-            Booking Reference Number
-            <input value={form.bookingReferenceNumber} onChange={(e) => updateField("bookingReferenceNumber", e.target.value)} placeholder="e.g. BRN-12345" />
-          </label>
-
-          <label>
-            Vehicle Type
-            <div className="driverInputRow">
-              <select value={form.vehicleType} onChange={(e) => updateField("vehicleType", e.target.value)}>
-                {form.vehicleType && !vehicles.some((v) => v.name === form.vehicleType) && (
-                  <option value={form.vehicleType} aria-label={`Vehicle not found: ${form.vehicleType}`}>(missing) {form.vehicleType}</option>
-                )}
-                {vehicles.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
-              </select>
-              <button
-                type="button"
-                className="addDriverBtn"
-                onClick={() => setShowManageVehicles(true)}
-                title="Manage vehicles"
-              >
-                <Settings size={16} />
-                Manage
-              </button>
-            </div>
-            {isCurrentSelectionAvailable === false && (
-              <div className="availability-warning">
-                ⚠️ This vehicle type is not available for the selected dates
-              </div>
-            )}
-            {isCurrentSelectionAvailable === true && form.pickupDate && form.returnDate && (
-              <div className="availability-success">
-                ✅ This vehicle type is available for the selected dates
-              </div>
-            )}
-          </label>
-
-          <div className="two">
-            <label>
-              Pickup Date
-              <input type="date" value={form.pickupDate} onChange={(e) => updateField("pickupDate", e.target.value)} />
-            </label>
-            <label>
-              Pickup Time
-              <input type="time" value={form.pickupTime} onChange={(e) => updateField("pickupTime", e.target.value)} />
-            </label>
-          </div>
-
-          <div className="two">
-            <label>
-              Return Date
-              <input type="date" value={form.returnDate} onChange={(e) => updateField("returnDate", e.target.value)} />
-            </label>
-            <label>
-              Return Time
-              <input type="time" value={form.returnTime} onChange={(e) => updateField("returnTime", e.target.value)} />
-            </label>
-          </div>
-
-          <label>
-            Pickup Location
-            <input value={form.pickupLocation} onChange={(e) => updateField("pickupLocation", e.target.value)} placeholder="Airport Terminal 1" />
-          </label>
-
-          <label>
-            Drop-off Location
-            <input value={form.dropoffLocation} onChange={(e) => updateField("dropoffLocation", e.target.value)} placeholder="City Centre Hotel" />
-          </label>
-
-          <label>
-            Driver
-            <div className="driverInputRow">
-              <select
-                value={form.driverName}
-                onChange={(e) => updateField("driverName", e.target.value)}
-              >
-                <option value="">— Select driver —</option>
-                {drivers.map((d) => (
-                  <option key={d.id} value={d.name}>{d.name}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="addDriverBtn"
-                onClick={() => setShowManageDrivers(true)}
-                title="Manage drivers"
-              >
-                <Settings size={16} />
-                Manage
-              </button>
-            </div>
-          </label>
-
-          <label>
-            Status
-            <select value={form.status} onChange={(e) => updateField("status", e.target.value)}>
-              <option>Scheduled</option>
-              <option>In Progress</option>
-              <option>Completed</option>
-              <option>Cancelled</option>
-            </select>
-          </label>
-
-          <label>
-            Notes
-            <textarea value={form.notes} onChange={(e) => updateField("notes", e.target.value)} placeholder="Passenger count, luggage, route notes..." />
-          </label>
+          <ScheduleFormFields
+            form={form}
+            updateField={updateField}
+            vehicles={vehicles}
+            drivers={drivers}
+            isSelectionAvailable={isCurrentSelectionAvailable}
+            onManageVehicles={() => setShowManageVehicles(true)}
+            onManageDrivers={() => setShowManageDrivers(true)}
+          />
 
           <button className="primary" type="submit">Add Schedule</button>
         </form>
@@ -668,16 +654,39 @@ function App({ user }) {
           {viewMode === "calendar" && (
             <div className="calendarView">
               <div className="calendarHeader">
-                <button className="navButton" onClick={() => navigateMonth(-1)}>
+                <button className="navButton" onClick={() => navigateMonth(-1)} title="Previous month">
                   <ChevronLeft size={20} />
                 </button>
-                <h3>
-                  {currentDate.toLocaleDateString("en-US", {
-                    month: "long",
-                    year: "numeric",
-                  })}
-                </h3>
-                <button className="navButton" onClick={() => navigateMonth(1)}>
+                <div className="calendarHeaderControls">
+                  <h3>
+                    {currentDate.toLocaleDateString("en-US", {
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </h3>
+                  <div className="calendarSelectors">
+                    <select
+                      value={currentDate.getMonth()}
+                      onChange={(e) => jumpToMonth(Number(e.target.value))}
+                      aria-label="Select month"
+                    >
+                      {MONTH_OPTIONS.map((month, index) => (
+                        <option key={month} value={index}>{month}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={currentDate.getFullYear()}
+                      onChange={(e) => jumpToYear(Number(e.target.value))}
+                      aria-label="Select year"
+                    >
+                      {yearOptions.map((year) => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
+                    <button className="todayButton" type="button" onClick={goToToday}>Today</button>
+                  </div>
+                </div>
+                <button className="navButton" onClick={() => navigateMonth(1)} title="Next month">
                   <ChevronRight size={20} />
                 </button>
               </div>
@@ -702,8 +711,22 @@ function App({ user }) {
                   const isToday = dateStr === formatDateForComparison(new Date());
 
                   return (
-                    <div key={dayNumber} className={`calendarDay ${isToday ? "today" : ""}`}>
+                    <div
+                      key={dayNumber}
+                      className={`calendarDay ${isToday ? "today" : ""}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openQuickAddModal(dateStr)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openQuickAddModal(dateStr);
+                        }
+                      }}
+                      title="Click to add a booking for this date"
+                    >
                       <span className="dayNumber">{dayNumber}</span>
+                      <div className="addHint">+ Add booking</div>
                       {dayTrips.length > 0 && (
                         <div className="dayTrips">
                           {dayTrips.slice(0, 2).map((trip) => {
@@ -715,7 +738,10 @@ function App({ user }) {
                                 className={`tripIndicator ${trip.status.toLowerCase().replace(" ", "-")} ${
                                   isPickupDay ? "pickup-day" : isReturnDay ? "return-day" : "middle-day"
                                 }`}
-                                onClick={() => openTripModal(trip)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openTripModal(trip);
+                                }}
                               >
                                 <span className="tripTime">
                                   {isPickupDay ? `↗ ${trip.pickupTime}` :
@@ -727,7 +753,13 @@ function App({ user }) {
                             );
                           })}
                           {dayTrips.length > 2 && (
-                            <div className="moreTrips" onClick={() => openDayModal(dateStr, dayTrips)}>
+                            <div
+                              className="moreTrips"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDayModal(dateStr, dayTrips);
+                              }}
+                            >
                               +{dayTrips.length - 2} more
                             </div>
                           )}
@@ -964,6 +996,42 @@ function App({ user }) {
         </div>
       )}
 
+      {/* Quick Add Modal */}
+      {quickAddDate && (
+        <div className="modal-overlay" onClick={closeQuickAddModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>
+                New Booking — {new Date(quickAddDate + "T12:00:00").toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </h2>
+              <button className="modal-close" onClick={closeQuickAddModal}>×</button>
+            </div>
+            <div className="modal-body">
+              <form className="form" onSubmit={addQuickTrip}>
+                <ScheduleFormFields
+                  form={quickAddForm}
+                  updateField={updateQuickField}
+                  vehicles={vehicles}
+                  drivers={drivers}
+                  isSelectionAvailable={isQuickSelectionAvailable}
+                  onManageVehicles={() => setShowManageVehicles(true)}
+                  onManageDrivers={() => setShowManageDrivers(true)}
+                />
+                <div className="modal-actions">
+                  <button className="primary" type="submit">Add Schedule</button>
+                  <button className="secondary" type="button" onClick={closeQuickAddModal}>Cancel</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Manage Vehicles Modal */}
       {showManageVehicles && (
         <div className="modal-overlay" onClick={() => { setShowManageVehicles(false); cancelEditVehicle(); setNewVehicleName(""); }}>
@@ -1088,3 +1156,129 @@ function App({ user }) {
 }
 
 createRoot(document.getElementById("root")).render(<Root />);
+
+function ScheduleFormFields({
+  form,
+  updateField,
+  vehicles,
+  drivers,
+  isSelectionAvailable,
+  onManageVehicles,
+  onManageDrivers,
+}) {
+  return (
+    <>
+      <label>
+        Customer / Company Name
+        <input value={form.customerName} onChange={(e) => updateField("customerName", e.target.value)} placeholder="Example: Dublin Tours Ltd" />
+      </label>
+
+      <label>
+        Booking Reference Number
+        <input value={form.bookingReferenceNumber} onChange={(e) => updateField("bookingReferenceNumber", e.target.value)} placeholder="e.g. BRN-12345" />
+      </label>
+
+      <label>
+        Vehicle Type
+        <div className="driverInputRow">
+          <select value={form.vehicleType} onChange={(e) => updateField("vehicleType", e.target.value)}>
+            {form.vehicleType && !vehicles.some((v) => v.name === form.vehicleType) && (
+              <option value={form.vehicleType} aria-label={`Vehicle not found: ${form.vehicleType}`}>(missing) {form.vehicleType}</option>
+            )}
+            {vehicles.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
+          </select>
+          <button
+            type="button"
+            className="addDriverBtn"
+            onClick={onManageVehicles}
+            title="Manage vehicles"
+          >
+            <Settings size={16} />
+            Manage
+          </button>
+        </div>
+        {isSelectionAvailable === false && (
+          <div className="availability-warning">
+            ⚠️ This vehicle type is not available for the selected dates
+          </div>
+        )}
+        {isSelectionAvailable === true && form.pickupDate && form.returnDate && (
+          <div className="availability-success">
+            ✅ This vehicle type is available for the selected dates
+          </div>
+        )}
+      </label>
+
+      <div className="two">
+        <label>
+          Pickup Date
+          <input type="date" value={form.pickupDate} onChange={(e) => updateField("pickupDate", e.target.value)} />
+        </label>
+        <label>
+          Pickup Time
+          <input type="time" value={form.pickupTime} onChange={(e) => updateField("pickupTime", e.target.value)} />
+        </label>
+      </div>
+
+      <div className="two">
+        <label>
+          Return Date
+          <input type="date" value={form.returnDate} onChange={(e) => updateField("returnDate", e.target.value)} />
+        </label>
+        <label>
+          Return Time
+          <input type="time" value={form.returnTime} onChange={(e) => updateField("returnTime", e.target.value)} />
+        </label>
+      </div>
+
+      <label>
+        Pickup Location
+        <input value={form.pickupLocation} onChange={(e) => updateField("pickupLocation", e.target.value)} placeholder="Airport Terminal 1" />
+      </label>
+
+      <label>
+        Drop-off Location
+        <input value={form.dropoffLocation} onChange={(e) => updateField("dropoffLocation", e.target.value)} placeholder="City Centre Hotel" />
+      </label>
+
+      <label>
+        Driver
+        <div className="driverInputRow">
+          <select
+            value={form.driverName}
+            onChange={(e) => updateField("driverName", e.target.value)}
+          >
+            <option value="">— Select driver —</option>
+            {drivers.map((d) => (
+              <option key={d.id} value={d.name}>{d.name}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="addDriverBtn"
+            onClick={onManageDrivers}
+            title="Manage drivers"
+          >
+            <Settings size={16} />
+            Manage
+          </button>
+        </div>
+      </label>
+
+      <label>
+        Status
+        <select value={form.status} onChange={(e) => updateField("status", e.target.value)}>
+          <option>Scheduled</option>
+          <option>In Progress</option>
+          <option>Completed</option>
+          <option>Cancelled</option>
+        </select>
+      </label>
+
+      <label>
+        Notes
+        <textarea value={form.notes} onChange={(e) => updateField("notes", e.target.value)} placeholder="Passenger count, luggage, route notes..." />
+      </label>
+    </>
+  );
+}
