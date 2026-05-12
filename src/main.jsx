@@ -47,6 +47,7 @@ const MONTH_OPTIONS = [
   "November",
   "December",
 ];
+const NOON_TIME = "T12:00:00";
 
 function toDateTime(date, time) {
   if (!date || !time) return null;
@@ -958,11 +959,11 @@ function App({ user }) {
         <div className="modal-overlay" onClick={closeDayModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>
-                {new Date(selectedDayData.dateStr + "T12:00:00").toLocaleDateString("en-US", {
-                  weekday: "long",
-                  month: "long",
-                  day: "numeric",
+                <h2>
+                  {new Date(selectedDayData.dateStr + NOON_TIME).toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
                 })}
               </h2>
               <button className="modal-close" onClick={closeDayModal}>×</button>
@@ -1002,7 +1003,7 @@ function App({ user }) {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>
-                New Booking — {new Date(quickAddDate + "T12:00:00").toLocaleDateString("en-US", {
+                New Booking — {new Date(quickAddDate + NOON_TIME).toLocaleDateString("en-US", {
                   weekday: "short",
                   month: "short",
                   day: "numeric",
@@ -1155,8 +1156,6 @@ function App({ user }) {
   );
 }
 
-createRoot(document.getElementById("root")).render(<Root />);
-
 function ScheduleFormFields({
   form,
   updateField,
@@ -1282,3 +1281,5 @@ function ScheduleFormFields({
     </>
   );
 }
+
+createRoot(document.getElementById("root")).render(<Root />);
