@@ -199,27 +199,46 @@ export function useCloudCollection(collectionName, user) {
           table: config.table,
           filter: `user_id=eq.${userId}`,
         },
-        (payload) => {
-          const { eventType, new: newRow, old: oldRow } = payload;
-          const current = itemsRef.current;
-          let next = current;
-          if (eventType === "INSERT" || eventType === "UPDATE") {
-            const incoming = config.fromRow(newRow);
-            const idx = current.findIndex((it) => it.id === incoming.id);
-            if (idx === -1) next = [...current, incoming];
-            else {
-              next = current.slice();
-              next[idx] = incoming;
+          (payload) => {
+            // Debug incoming realtime payloads so we can see why updates
+            // from other devices might not be applied. Different
+            // supabase-js / realtime versions expose the fields with
+            // slightly different names (eventType / event / type, new /
+            // record, old / record_old). Be defensive here.
+            try {
+              // Uncomment for verbose logging during debugging:
+              // console.debug(`[cloud:${collectionName}] realtime payload`, payload);
+            } catch (e) {
+              /* ignore logging failures */
             }
-          } else if (eventType === "DELETE") {
-            next = current.filter((it) => it.id !== oldRow.id);
+
+            const eventType = payload.eventType ?? payload.event ?? payload.type;
+            const newRow = payload.new ?? payload.record ?? payload.record_new ?? null;
+            const oldRow = payload.old ?? payload.record_old ?? null;
+
+            const current = itemsRef.current;
+            let next = current;
+
+            if (eventType === "INSERT" || eventType === "UPDATE") {
+              if (!newRow) return; // malformed payload
+              const incoming = config.fromRow(newRow);
+              const idx = current.findIndex((it) => it.id === incoming.id);
+              if (idx === -1) next = [...current, incoming];
+              else {
+                next = current.slice();
+                next[idx] = incoming;
+              }
+            } else if (eventType === "DELETE") {
+              if (!oldRow) return;
+              next = current.filter((it) => it.id !== (oldRow.id ?? oldRow));
+            }
+
+            if (next !== current) {
+              itemsRef.current = next;
+              setItemsState(next);
+              writeJSON(cacheKey(userId, collectionName), next);
+            }
           }
-          if (next !== current) {
-            itemsRef.current = next;
-            setItemsState(next);
-            writeJSON(cacheKey(userId, collectionName), next);
-          }
-        }
       )
       .subscribe();
 
