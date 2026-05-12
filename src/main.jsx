@@ -105,6 +105,10 @@ function App({ user }) {
   const [editingVehicleId, setEditingVehicleId] = useState(null);
   const [editingVehicleName, setEditingVehicleName] = useState("");
 
+  // Edit trip state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editForm, setEditForm] = useState(emptyForm);
+
   // Online/offline indicator
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== "undefined" ? navigator.onLine : true
@@ -205,6 +209,12 @@ function App({ user }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.vehicleType, form.pickupDate, form.pickupTime, form.returnDate, form.returnTime, trips]);
 
+  const isCurrentDriverAvailable = useMemo(() => {
+    if (!form.driverName || !form.pickupDate || !form.returnDate) return null;
+    return isDriverAvailable(form.driverName, form.pickupDate, form.pickupTime, form.returnDate, form.returnTime);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.driverName, form.pickupDate, form.pickupTime, form.returnDate, form.returnTime, trips]);
+
   const filteredTrips = useMemo(() => {
     const q = search.toLowerCase();
     return trips
@@ -251,6 +261,24 @@ function App({ user }) {
     trips,
   ]);
 
+  const isQuickDriverAvailable = useMemo(() => {
+    if (!quickAddForm.driverName || !quickAddForm.pickupDate || !quickAddForm.returnDate) return null;
+    return isDriverAvailable(quickAddForm.driverName, quickAddForm.pickupDate, quickAddForm.pickupTime, quickAddForm.returnDate, quickAddForm.returnTime);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickAddForm.driverName, quickAddForm.pickupDate, quickAddForm.pickupTime, quickAddForm.returnDate, quickAddForm.returnTime, trips]);
+
+  const isEditVehicleAvailable = useMemo(() => {
+    if (!isEditMode || !editForm.vehicleType || !editForm.pickupDate || !editForm.returnDate) return null;
+    return isVehicleAvailable(editForm.vehicleType, editForm.pickupDate, editForm.pickupTime, editForm.returnDate, editForm.returnTime, editForm.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode, editForm.vehicleType, editForm.pickupDate, editForm.pickupTime, editForm.returnDate, editForm.returnTime, editForm.id, trips]);
+
+  const isEditDriverAvailable = useMemo(() => {
+    if (!isEditMode || !editForm.driverName || !editForm.pickupDate || !editForm.returnDate) return null;
+    return isDriverAvailable(editForm.driverName, editForm.pickupDate, editForm.pickupTime, editForm.returnDate, editForm.returnTime, editForm.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode, editForm.driverName, editForm.pickupDate, editForm.pickupTime, editForm.returnDate, editForm.returnTime, editForm.id, trips]);
+
   const yearOptions = useMemo(() => {
     const year = new Date().getFullYear();
     return Array.from({ length: 11 }, (_, i) => year - 5 + i);
@@ -286,6 +314,11 @@ function App({ user }) {
 
     if (!isVehicleAvailable(sourceForm.vehicleType, sourceForm.pickupDate, sourceForm.pickupTime, sourceForm.returnDate, sourceForm.returnTime)) {
       alert(`${sourceForm.vehicleType} is not available for the selected dates. Please choose different dates or another vehicle type.`);
+      return false;
+    }
+
+    if (sourceForm.driverName && !isDriverAvailable(sourceForm.driverName, sourceForm.pickupDate, sourceForm.pickupTime, sourceForm.returnDate, sourceForm.returnTime)) {
+      alert(`${sourceForm.driverName} is not available for the selected dates. Please choose different dates or another driver.`);
       return false;
     }
 
@@ -498,6 +531,25 @@ function App({ user }) {
     });
   }
 
+  function isDriverAvailable(driverName, pickupDate, pickupTime, returnDate, returnTime, excludeTripId = null) {
+    if (!driverName) return true;
+    const reqStart = toDateTime(pickupDate, pickupTime || "00:00");
+    const reqEnd = toDateTime(returnDate, returnTime || "23:59");
+    if (!reqStart || !reqEnd) return true;
+
+    return !trips.some((trip) => {
+      if (trip.id === excludeTripId) return false;
+      if (trip.driverName !== driverName) return false;
+      const tripStart = toDateTime(trip.pickupDate, trip.pickupTime || "00:00");
+      const tripEnd = toDateTime(
+        trip.returnDate || trip.dropoffDate,
+        trip.returnTime || trip.dropoffTime || "23:59"
+      );
+      if (!tripStart || !tripEnd) return false;
+      return reqStart < tripEnd && reqEnd > tripStart;
+    });
+  }
+
   function navigateMonth(direction) {
     const newDate = new Date(currentDate);
     newDate.setMonth(newDate.getMonth() + direction);
@@ -534,10 +586,55 @@ function App({ user }) {
     setQuickAddForm(emptyForm);
   }
 
-  function openTripModal(trip) { setSelectedTrip(trip); }
-  function closeTripModal() { setSelectedTrip(null); }
+  function openTripModal(trip) { setSelectedTrip(trip); setIsEditMode(false); setEditForm(emptyForm); }
+  function closeTripModal() { setSelectedTrip(null); setIsEditMode(false); setEditForm(emptyForm); }
   function openDayModal(dateStr, dayTrips) { setSelectedDayData({ dateStr, trips: dayTrips }); }
   function closeDayModal() { setSelectedDayData(null); }
+
+  function openTripModalForEdit(trip) {
+    setSelectedTrip(trip);
+    setEditForm({ ...trip });
+    setIsEditMode(true);
+  }
+
+  function updateEditField(field, value) {
+    setEditForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function saveEditTrip() {
+    const pickup = toDateTime(editForm.pickupDate, editForm.pickupTime);
+    const returnDateTime = toDateTime(editForm.returnDate, editForm.returnTime);
+
+    if (!editForm.customerName || !editForm.pickupLocation || !editForm.dropoffLocation || !pickup || !returnDateTime) {
+      alert("Please fill in customer, locations, pickup date/time, and return date/time.");
+      return;
+    }
+
+    if (returnDateTime <= pickup) {
+      alert("Return date/time must be after pickup date/time.");
+      return;
+    }
+
+    if (!isVehicleAvailable(editForm.vehicleType, editForm.pickupDate, editForm.pickupTime, editForm.returnDate, editForm.returnTime, editForm.id)) {
+      alert(`${editForm.vehicleType} is not available for the selected dates. Please choose different dates or another vehicle type.`);
+      return;
+    }
+
+    if (editForm.driverName && !isDriverAvailable(editForm.driverName, editForm.pickupDate, editForm.pickupTime, editForm.returnDate, editForm.returnTime, editForm.id)) {
+      alert(`${editForm.driverName} is not available for the selected dates. Please choose different dates or another driver.`);
+      return;
+    }
+
+    const updatedTrip = { ...editForm };
+    setTrips(trips.map((t) => (t.id === updatedTrip.id ? updatedTrip : t)));
+    setSelectedTrip(updatedTrip);
+    setIsEditMode(false);
+  }
+
+  function cancelEditTrip() {
+    setIsEditMode(false);
+    setEditForm(emptyForm);
+  }
 
   // ---- Render -------------------------------------------------------------
 
@@ -594,6 +691,7 @@ function App({ user }) {
             vehicles={vehicles}
             drivers={drivers}
             isSelectionAvailable={isCurrentSelectionAvailable}
+            isDriverSelectionAvailable={isCurrentDriverAvailable}
             onManageVehicles={() => setShowManageVehicles(true)}
             onManageDrivers={() => setShowManageDrivers(true)}
           />
@@ -786,9 +884,14 @@ function App({ user }) {
                           <h3>{trip.customerName}</h3>
                           <span className={`badge ${trip.status.toLowerCase().replace(" ", "-")}`}>{trip.status}</span>
                         </div>
-                        <button className="iconButton" onClick={() => deleteTrip(trip.id)} aria-label="Delete trip">
-                          <Trash2 size={18} />
-                        </button>
+                        <div style={{ display: "flex", gap: "4px" }}>
+                          <button className="iconButton" onClick={() => openTripModalForEdit(trip)} aria-label="Edit trip">
+                            <Pencil size={18} />
+                          </button>
+                          <button className="iconButton" onClick={() => deleteTrip(trip.id)} aria-label="Delete trip">
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
                       </div>
 
                       <div className="details">
@@ -867,88 +970,111 @@ function App({ user }) {
         <div className="modal-overlay" onClick={closeTripModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Trip Details</h2>
+              <h2>{isEditMode ? "Edit Trip" : "Trip Details"}</h2>
               <button className="modal-close" onClick={closeTripModal}>×</button>
             </div>
             <div className="modal-body">
-              <div className="trip-detail-card">
-                <div className="trip-detail-header">
-                  <h3>{selectedTrip.customerName}</h3>
-                  <span className={`badge ${selectedTrip.status.toLowerCase().replace(" ", "-")}`}>{selectedTrip.status}</span>
-                </div>
-
-                <div className="trip-details-grid">
-                  <div className="detail-item">
-                    <Bus size={16} />
-                    <div>
-                      <span className="detail-label">Vehicle Type</span>
-                      <span className="detail-value">{selectedTrip.vehicleType}</span>
-                    </div>
+              {isEditMode ? (
+                <form className="form" onSubmit={(e) => { e.preventDefault(); saveEditTrip(); }}>
+                  <ScheduleFormFields
+                    form={editForm}
+                    updateField={updateEditField}
+                    vehicles={vehicles}
+                    drivers={drivers}
+                    isSelectionAvailable={isEditVehicleAvailable}
+                    isDriverSelectionAvailable={isEditDriverAvailable}
+                    onManageVehicles={() => setShowManageVehicles(true)}
+                    onManageDrivers={() => setShowManageDrivers(true)}
+                  />
+                  <div className="modal-actions">
+                    <button className="primary" type="submit">Save Changes</button>
+                    <button className="secondary" type="button" onClick={cancelEditTrip}>Cancel</button>
+                  </div>
+                </form>
+              ) : (
+                <div className="trip-detail-card">
+                  <div className="trip-detail-header">
+                    <h3>{selectedTrip.customerName}</h3>
+                    <span className={`badge ${selectedTrip.status.toLowerCase().replace(" ", "-")}`}>{selectedTrip.status}</span>
                   </div>
 
-                  {selectedTrip.bookingReferenceNumber && (
+                  <div className="trip-details-grid">
                     <div className="detail-item">
-                      <div className="notes-icon">🔖</div>
+                      <Bus size={16} />
                       <div>
-                        <span className="detail-label">Booking Reference</span>
-                        <span className="detail-value">{selectedTrip.bookingReferenceNumber}</span>
+                        <span className="detail-label">Vehicle Type</span>
+                        <span className="detail-value">{selectedTrip.vehicleType}</span>
                       </div>
                     </div>
-                  )}
 
-                  <div className="detail-item">
-                    <Clock size={16} />
-                    <div>
-                      <span className="detail-label">Pickup</span>
-                      <span className="detail-value">{selectedTrip.pickupDate} at {selectedTrip.pickupTime}</span>
-                    </div>
-                  </div>
+                    {selectedTrip.bookingReferenceNumber && (
+                      <div className="detail-item">
+                        <div className="notes-icon">🔖</div>
+                        <div>
+                          <span className="detail-label">Booking Reference</span>
+                          <span className="detail-value">{selectedTrip.bookingReferenceNumber}</span>
+                        </div>
+                      </div>
+                    )}
 
-                  <div className="detail-item">
-                    <Clock size={16} />
-                    <div>
-                      <span className="detail-label">Return</span>
-                      <span className="detail-value">{selectedTrip.returnDate || selectedTrip.dropoffDate} at {selectedTrip.returnTime || selectedTrip.dropoffTime}</span>
-                    </div>
-                  </div>
-
-                  <div className="detail-item">
-                    <MapPin size={16} />
-                    <div>
-                      <span className="detail-label">Route</span>
-                      <span className="detail-value">{selectedTrip.pickupLocation} → {selectedTrip.dropoffLocation}</span>
-                    </div>
-                  </div>
-
-                  {selectedTrip.driverName && (
                     <div className="detail-item">
-                      <div className="driver-icon">👤</div>
+                      <Clock size={16} />
                       <div>
-                        <span className="detail-label">Driver</span>
-                        <span className="detail-value">{selectedTrip.driverName}</span>
+                        <span className="detail-label">Pickup</span>
+                        <span className="detail-value">{selectedTrip.pickupDate} at {selectedTrip.pickupTime}</span>
                       </div>
                     </div>
-                  )}
 
-                  {selectedTrip.notes && (
-                    <div className="detail-item notes-item">
-                      <div className="notes-icon">📝</div>
+                    <div className="detail-item">
+                      <Clock size={16} />
                       <div>
-                        <span className="detail-label">Notes</span>
-                        <span className="detail-value notes-text">{selectedTrip.notes}</span>
+                        <span className="detail-label">Return</span>
+                        <span className="detail-value">{selectedTrip.returnDate || selectedTrip.dropoffDate} at {selectedTrip.returnTime || selectedTrip.dropoffTime}</span>
                       </div>
                     </div>
-                  )}
-                </div>
 
-                <div className="modal-actions">
-                  <button className="danger" onClick={() => { deleteTrip(selectedTrip.id); closeTripModal(); }}>
-                    <Trash2 size={16} />
-                    Delete Trip
-                  </button>
-                  <button className="secondary" onClick={closeTripModal}>Close</button>
+                    <div className="detail-item">
+                      <MapPin size={16} />
+                      <div>
+                        <span className="detail-label">Route</span>
+                        <span className="detail-value">{selectedTrip.pickupLocation} → {selectedTrip.dropoffLocation}</span>
+                      </div>
+                    </div>
+
+                    {selectedTrip.driverName && (
+                      <div className="detail-item">
+                        <div className="driver-icon">👤</div>
+                        <div>
+                          <span className="detail-label">Driver</span>
+                          <span className="detail-value">{selectedTrip.driverName}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedTrip.notes && (
+                      <div className="detail-item notes-item">
+                        <div className="notes-icon">📝</div>
+                        <div>
+                          <span className="detail-label">Notes</span>
+                          <span className="detail-value notes-text">{selectedTrip.notes}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="modal-actions">
+                    <button className="primary" onClick={() => openTripModalForEdit(selectedTrip)}>
+                      <Pencil size={16} />
+                      Edit Trip
+                    </button>
+                    <button className="danger" onClick={() => { deleteTrip(selectedTrip.id); closeTripModal(); }}>
+                      <Trash2 size={16} />
+                      Delete Trip
+                    </button>
+                    <button className="secondary" onClick={closeTripModal}>Close</button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -1020,6 +1146,7 @@ function App({ user }) {
                   vehicles={vehicles}
                   drivers={drivers}
                   isSelectionAvailable={isQuickSelectionAvailable}
+                  isDriverSelectionAvailable={isQuickDriverAvailable}
                   onManageVehicles={() => setShowManageVehicles(true)}
                   onManageDrivers={() => setShowManageDrivers(true)}
                 />
@@ -1162,6 +1289,7 @@ function ScheduleFormFields({
   vehicles,
   drivers,
   isSelectionAvailable,
+  isDriverSelectionAvailable,
   onManageVehicles,
   onManageDrivers,
 }) {
@@ -1262,6 +1390,16 @@ function ScheduleFormFields({
             Manage
           </button>
         </div>
+        {isDriverSelectionAvailable === false && (
+          <div className="availability-warning">
+            ⚠️ This driver is not available for the selected dates
+          </div>
+        )}
+        {isDriverSelectionAvailable === true && form.pickupDate && form.returnDate && (
+          <div className="availability-success">
+            ✅ This driver is available for the selected dates
+          </div>
+        )}
       </label>
 
       <label>
