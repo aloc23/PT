@@ -661,7 +661,7 @@ function App({ user }) {
             <div className="journeySection">
               <div className="sectionHeading">
                 <strong>Return trip</strong>
-                <span>the return route will use {form.dropoffLocation || "the drop-off"} → {form.pickupLocation || "the pickup"}.</span>
+                <span>Return route: {form.dropoffLocation || "the drop-off"} → {form.pickupLocation || "the pickup"}.</span>
               </div>
               <div className="two">
                 <label>
