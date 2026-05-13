@@ -315,7 +315,6 @@ function App({ user }) {
 
     const newTrip = {
       ...form,
-      hasReturnTrip: form.hasReturnTrip,
       returnPickupDate: form.hasReturnTrip ? form.returnPickupDate : "",
       returnPickupTime: form.hasReturnTrip ? form.returnPickupTime : "",
       returnDropoffDate: form.hasReturnTrip ? form.returnDropoffDate : "",
@@ -662,7 +661,7 @@ function App({ user }) {
             <div className="journeySection">
               <div className="sectionHeading">
                 <strong>Return trip</strong>
-                <span>The return route will use {form.dropoffLocation || "the drop-off"} → {form.pickupLocation || "the pickup"}.</span>
+                <span>the return route will use {form.dropoffLocation || "the drop-off"} → {form.pickupLocation || "the pickup"}.</span>
               </div>
               <div className="two">
                 <label>
