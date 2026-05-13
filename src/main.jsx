@@ -18,8 +18,8 @@ const emptyForm = {
   dropoffLocation: "",
   pickupDate: "",
   pickupTime: "",
-  returnDate: "",
-  returnTime: "",
+  dropoffDate: "",
+  dropoffTime: "",
   hasReturnTrip: false,
   returnPickupDate: "",
   returnPickupTime: "",
@@ -54,11 +54,11 @@ function hasReturnTrip(trip) {
 }
 
 function getOutboundDropoffDate(trip) {
-  return trip.returnDate || trip.dropoffDate || "";
+  return trip.dropoffDate || trip.returnDate || "";
 }
 
 function getOutboundDropoffTime(trip) {
-  return trip.returnTime || trip.dropoffTime || "";
+  return trip.dropoffTime || trip.returnTime || "";
 }
 
 function getTripEndDate(trip) {
@@ -212,8 +212,8 @@ function App({ user }) {
   // ---- Derived state ------------------------------------------------------
 
   const isCurrentSelectionAvailable = useMemo(() => {
-    const endDate = form.hasReturnTrip ? form.returnDropoffDate : form.returnDate;
-    const endTime = form.hasReturnTrip ? form.returnDropoffTime : form.returnTime;
+    const endDate = form.hasReturnTrip ? form.returnDropoffDate : form.dropoffDate;
+    const endTime = form.hasReturnTrip ? form.returnDropoffTime : form.dropoffTime;
     if (!form.vehicleType || !form.pickupDate || !endDate) return null;
     return isVehicleAvailable(
       form.vehicleType,
@@ -227,8 +227,8 @@ function App({ user }) {
     form.vehicleType,
     form.pickupDate,
     form.pickupTime,
-    form.returnDate,
-    form.returnTime,
+    form.dropoffDate,
+    form.dropoffTime,
     form.hasReturnTrip,
     form.returnDropoffDate,
     form.returnDropoffTime,
@@ -277,11 +277,11 @@ function App({ user }) {
     event.preventDefault();
 
     const pickup = toDateTime(form.pickupDate, form.pickupTime);
-    const outboundDropoff = toDateTime(form.returnDate, form.returnTime);
+    const outboundDropoff = toDateTime(form.dropoffDate, form.dropoffTime);
     const returnPickup = toDateTime(form.returnPickupDate, form.returnPickupTime);
     const returnDropoff = toDateTime(form.returnDropoffDate, form.returnDropoffTime);
-    const bookingEndDate = form.hasReturnTrip ? form.returnDropoffDate : form.returnDate;
-    const bookingEndTime = form.hasReturnTrip ? form.returnDropoffTime : form.returnTime;
+    const bookingEndDate = form.hasReturnTrip ? form.returnDropoffDate : form.dropoffDate;
+    const bookingEndTime = form.hasReturnTrip ? form.returnDropoffTime : form.dropoffTime;
 
     if (!form.customerName || !form.pickupLocation || !form.dropoffLocation || !pickup || !outboundDropoff) {
       alert("Please fill in customer, locations, pickup date/time, and drop-off date/time.");
@@ -313,12 +313,23 @@ function App({ user }) {
       return;
     }
 
+    const returnTripFields = form.hasReturnTrip
+      ? {
+          returnPickupDate: form.returnPickupDate,
+          returnPickupTime: form.returnPickupTime,
+          returnDropoffDate: form.returnDropoffDate,
+          returnDropoffTime: form.returnDropoffTime,
+        }
+      : {
+          returnPickupDate: "",
+          returnPickupTime: "",
+          returnDropoffDate: "",
+          returnDropoffTime: "",
+        };
+
     const newTrip = {
       ...form,
-      returnPickupDate: form.hasReturnTrip ? form.returnPickupDate : "",
-      returnPickupTime: form.hasReturnTrip ? form.returnPickupTime : "",
-      returnDropoffDate: form.hasReturnTrip ? form.returnDropoffDate : "",
-      returnDropoffTime: form.hasReturnTrip ? form.returnDropoffTime : "",
+      ...returnTripFields,
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
     };
@@ -609,7 +620,7 @@ function App({ user }) {
                 ⚠️ This vehicle type is not available for the selected dates
               </div>
             )}
-            {isCurrentSelectionAvailable === true && form.pickupDate && (form.hasReturnTrip ? form.returnDropoffDate : form.returnDate) && (
+            {isCurrentSelectionAvailable === true && form.pickupDate && (form.hasReturnTrip ? form.returnDropoffDate : form.dropoffDate) && (
               <div className="availability-success">
                 ✅ This vehicle type is available for the selected dates
               </div>
@@ -634,11 +645,11 @@ function App({ user }) {
             <div className="two">
               <label>
                 Drop-off Date
-                <input type="date" value={form.returnDate} onChange={(e) => updateField("returnDate", e.target.value)} />
+                <input type="date" value={form.dropoffDate} onChange={(e) => updateField("dropoffDate", e.target.value)} />
               </label>
               <label>
                 Drop-off Time
-                <input type="time" value={form.returnTime} onChange={(e) => updateField("returnTime", e.target.value)} />
+                <input type="time" value={form.dropoffTime} onChange={(e) => updateField("dropoffTime", e.target.value)} />
               </label>
             </div>
           </div>
