@@ -277,18 +277,18 @@ function App({ user }) {
     event.preventDefault();
 
     const pickup = toDateTime(form.pickupDate, form.pickupTime);
-    const dropoff = toDateTime(form.returnDate, form.returnTime);
+    const outboundDropoff = toDateTime(form.returnDate, form.returnTime);
     const returnPickup = toDateTime(form.returnPickupDate, form.returnPickupTime);
     const returnDropoff = toDateTime(form.returnDropoffDate, form.returnDropoffTime);
     const bookingEndDate = form.hasReturnTrip ? form.returnDropoffDate : form.returnDate;
     const bookingEndTime = form.hasReturnTrip ? form.returnDropoffTime : form.returnTime;
 
-    if (!form.customerName || !form.pickupLocation || !form.dropoffLocation || !pickup || !dropoff) {
+    if (!form.customerName || !form.pickupLocation || !form.dropoffLocation || !pickup || !outboundDropoff) {
       alert("Please fill in customer, locations, pickup date/time, and drop-off date/time.");
       return;
     }
 
-    if (dropoff <= pickup) {
+    if (outboundDropoff <= pickup) {
       alert("Drop-off date/time must be after pickup date/time.");
       return;
     }
@@ -298,7 +298,7 @@ function App({ user }) {
       return;
     }
 
-    if (form.hasReturnTrip && returnPickup <= dropoff) {
+    if (form.hasReturnTrip && returnPickup <= outboundDropoff) {
       alert("Return pickup date/time must be after the outbound drop-off date/time.");
       return;
     }
@@ -661,7 +661,11 @@ function App({ user }) {
             <div className="journeySection">
               <div className="sectionHeading">
                 <strong>Return trip</strong>
-                <span>Return route: {form.dropoffLocation || "the drop-off"} → {form.pickupLocation || "the pickup"}.</span>
+                <span>
+                  {form.pickupLocation && form.dropoffLocation
+                    ? `Return route: ${form.dropoffLocation} → ${form.pickupLocation}.`
+                    : "Return route will appear once pickup and drop-off locations are entered."}
+                </span>
               </div>
               <div className="two">
                 <label>
