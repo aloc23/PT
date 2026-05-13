@@ -19,10 +19,15 @@ from any device (mobile, tablet, desktop) and data stays in sync.
 
 ## 2. Run the database migration
 
-Open **SQL Editor** in the Supabase dashboard, paste the contents of
-[`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql),
-and hit **Run**. This creates three per-user tables (`trips`, `drivers`,
-`vehicles`) with row-level security and enables Realtime broadcasts.
+Open **SQL Editor** in the Supabase dashboard and run the SQL files in
+[`supabase/migrations/`](supabase/migrations/) order:
+
+1. [`0001_init.sql`](supabase/migrations/0001_init.sql)
+2. [`0002_return_trip_fields.sql`](supabase/migrations/0002_return_trip_fields.sql)
+
+This creates the per-user tables (`trips`, `drivers`, `vehicles`), enables
+Realtime broadcasts, and adds the optional return-trip fields used by the
+schedule form.
 
 If you use the Supabase CLI instead, the file is already in the
 conventional location:
@@ -125,7 +130,7 @@ supabase/
 
 - Add customer / company name and optional booking reference
 - Pick vehicle type and manage the vehicle list (add / rename / delete)
-- Pickup + return date/time with validation
+- Outbound pickup/drop-off timing plus an optional return-trip section
 - Pickup and drop-off locations
 - Driver management (add / rename / delete; renames propagate to existing
   trips)

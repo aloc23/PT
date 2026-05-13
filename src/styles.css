@@ -92,6 +92,61 @@ h2 {
   gap: 14px;
 }
 
+.journeySection {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #e3eaf4;
+  border-radius: 18px;
+  background: #f8fbff;
+}
+
+.sectionHeading {
+  display: grid;
+  gap: 4px;
+}
+
+.sectionHeading strong {
+  font-size: 15px;
+}
+
+.sectionHeading span {
+  color: #5f6f8a;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.checkboxCard {
+  gap: 0;
+  padding: 14px 16px;
+  border: 1px solid #d9e5f4;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.checkboxRow input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+}
+
+.checkboxRow span {
+  display: grid;
+  gap: 2px;
+}
+
+.checkboxRow small {
+  color: #5f6f8a;
+  font-size: 12px;
+  font-weight: 500;
+}
+
 label {
   display: grid;
   gap: 7px;
@@ -295,6 +350,10 @@ button:disabled {
   .card {
     padding: 18px;
     border-radius: 20px;
+  }
+
+  .checkboxRow {
+    align-items: center;
   }
 }
 

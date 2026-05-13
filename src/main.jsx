@@ -18,8 +18,13 @@ const emptyForm = {
   dropoffLocation: "",
   pickupDate: "",
   pickupTime: "",
-  returnDate: "",
-  returnTime: "",
+  dropoffDate: "",
+  dropoffTime: "",
+  hasReturnTrip: false,
+  returnPickupDate: "",
+  returnPickupTime: "",
+  returnDropoffDate: "",
+  returnDropoffTime: "",
   driverName: "",
   notes: "",
   status: "Scheduled",
@@ -36,6 +41,37 @@ const DEFAULT_VEHICLE_NAMES = [
 function toDateTime(date, time) {
   if (!date || !time) return null;
   return new Date(`${date}T${time}`);
+}
+
+function hasReturnTrip(trip) {
+  return Boolean(
+    trip.hasReturnTrip ||
+    trip.returnPickupDate ||
+    trip.returnPickupTime ||
+    trip.returnDropoffDate ||
+    trip.returnDropoffTime
+  );
+}
+
+function getOutboundDropoffDate(trip) {
+  return trip.dropoffDate || trip.returnDate || "";
+}
+
+function getOutboundDropoffTime(trip) {
+  return trip.dropoffTime || trip.returnTime || "";
+}
+
+function getTripEndDate(trip) {
+  return hasReturnTrip(trip) ? trip.returnDropoffDate || "" : getOutboundDropoffDate(trip);
+}
+
+function getTripEndTime(trip) {
+  return hasReturnTrip(trip) ? trip.returnDropoffTime || "" : getOutboundDropoffTime(trip);
+}
+
+function formatDateTime(date, time) {
+  if (date && time) return `${date} at ${time}`;
+  return date || time || "—";
 }
 
 // ---------- Top-level: gate the whole app on auth ---------------------------
@@ -176,16 +212,28 @@ function App({ user }) {
   // ---- Derived state ------------------------------------------------------
 
   const isCurrentSelectionAvailable = useMemo(() => {
-    if (!form.vehicleType || !form.pickupDate || !form.returnDate) return null;
+    const endDate = form.hasReturnTrip ? form.returnDropoffDate : form.dropoffDate;
+    const endTime = form.hasReturnTrip ? form.returnDropoffTime : form.dropoffTime;
+    if (!form.vehicleType || !form.pickupDate || !endDate) return null;
     return isVehicleAvailable(
       form.vehicleType,
       form.pickupDate,
       form.pickupTime,
-      form.returnDate,
-      form.returnTime
+      endDate,
+      endTime
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.vehicleType, form.pickupDate, form.pickupTime, form.returnDate, form.returnTime, trips]);
+  }, [
+    form.vehicleType,
+    form.pickupDate,
+    form.pickupTime,
+    form.dropoffDate,
+    form.dropoffTime,
+    form.hasReturnTrip,
+    form.returnDropoffDate,
+    form.returnDropoffTime,
+    trips,
+  ]);
 
   const filteredTrips = useMemo(() => {
     const q = search.toLowerCase();
@@ -200,8 +248,13 @@ function App({ user }) {
           trip.dropoffLocation,
           trip.driverName,
           trip.status,
-          trip.returnDate || trip.dropoffDate,
-          trip.returnTime || trip.dropoffTime,
+          getOutboundDropoffDate(trip),
+          getOutboundDropoffTime(trip),
+          trip.returnPickupDate,
+          trip.returnPickupTime,
+          trip.returnDropoffDate,
+          trip.returnDropoffTime,
+          hasReturnTrip(trip) ? "return trip" : "one way",
         ]
           .join(" ")
           .toLowerCase()
@@ -224,25 +277,59 @@ function App({ user }) {
     event.preventDefault();
 
     const pickup = toDateTime(form.pickupDate, form.pickupTime);
-    const returnDateTime = toDateTime(form.returnDate, form.returnTime);
+    const outboundDropoff = toDateTime(form.dropoffDate, form.dropoffTime);
+    const returnPickup = toDateTime(form.returnPickupDate, form.returnPickupTime);
+    const returnDropoff = toDateTime(form.returnDropoffDate, form.returnDropoffTime);
+    const bookingEndDate = form.hasReturnTrip ? form.returnDropoffDate : form.dropoffDate;
+    const bookingEndTime = form.hasReturnTrip ? form.returnDropoffTime : form.dropoffTime;
 
-    if (!form.customerName || !form.pickupLocation || !form.dropoffLocation || !pickup || !returnDateTime) {
-      alert("Please fill in customer, locations, pickup date/time, and return date/time.");
+    if (!form.customerName || !form.pickupLocation || !form.dropoffLocation || !pickup || !outboundDropoff) {
+      alert("Please fill in customer, locations, pickup date/time, and drop-off date/time.");
       return;
     }
 
-    if (returnDateTime <= pickup) {
-      alert("Return date/time must be after pickup date/time.");
+    if (outboundDropoff <= pickup) {
+      alert("Drop-off date/time must be after pickup date/time.");
       return;
     }
 
-    if (!isVehicleAvailable(form.vehicleType, form.pickupDate, form.pickupTime, form.returnDate, form.returnTime)) {
+    if (form.hasReturnTrip && (!returnPickup || !returnDropoff)) {
+      alert("Please add the return pickup and return drop-off date/time.");
+      return;
+    }
+
+    if (form.hasReturnTrip && returnPickup <= outboundDropoff) {
+      alert("Return pickup date/time must be after the outbound drop-off date/time.");
+      return;
+    }
+
+    if (form.hasReturnTrip && returnDropoff <= returnPickup) {
+      alert("Return drop-off date/time must be after the return pickup date/time.");
+      return;
+    }
+
+    if (!isVehicleAvailable(form.vehicleType, form.pickupDate, form.pickupTime, bookingEndDate, bookingEndTime)) {
       alert(`${form.vehicleType} is not available for the selected dates. Please choose different dates or another vehicle type.`);
       return;
     }
 
+    const returnTripFields = form.hasReturnTrip
+      ? {
+          returnPickupDate: form.returnPickupDate,
+          returnPickupTime: form.returnPickupTime,
+          returnDropoffDate: form.returnDropoffDate,
+          returnDropoffTime: form.returnDropoffTime,
+        }
+      : {
+          returnPickupDate: "",
+          returnPickupTime: "",
+          returnDropoffDate: "",
+          returnDropoffTime: "",
+        };
+
     const newTrip = {
       ...form,
+      ...returnTripFields,
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
     };
@@ -415,7 +502,7 @@ function App({ user }) {
 
   function getTripsForDate(dateStr) {
     return filteredTrips.filter((trip) => {
-      const tripDates = getDateRange(trip.pickupDate, trip.returnDate || trip.dropoffDate);
+      const tripDates = getDateRange(trip.pickupDate, getTripEndDate(trip) || trip.pickupDate);
       return tripDates.includes(dateStr);
     });
   }
@@ -430,8 +517,8 @@ function App({ user }) {
       if (trip.vehicleType !== vehicleType) return false;
       const tripStart = toDateTime(trip.pickupDate, trip.pickupTime || "00:00");
       const tripEnd = toDateTime(
-        trip.returnDate || trip.dropoffDate,
-        trip.returnTime || trip.dropoffTime || "23:59"
+        getTripEndDate(trip),
+        getTripEndTime(trip) || "23:59"
       );
       if (!tripStart || !tripEnd) return false;
       return reqStart < tripEnd && reqEnd > tripStart;
@@ -533,34 +620,86 @@ function App({ user }) {
                 ⚠️ This vehicle type is not available for the selected dates
               </div>
             )}
-            {isCurrentSelectionAvailable === true && form.pickupDate && form.returnDate && (
+            {isCurrentSelectionAvailable === true && form.pickupDate && (form.hasReturnTrip ? form.returnDropoffDate : form.dropoffDate) && (
               <div className="availability-success">
                 ✅ This vehicle type is available for the selected dates
               </div>
             )}
           </label>
 
-          <div className="two">
-            <label>
-              Pickup Date
-              <input type="date" value={form.pickupDate} onChange={(e) => updateField("pickupDate", e.target.value)} />
-            </label>
-            <label>
-              Pickup Time
-              <input type="time" value={form.pickupTime} onChange={(e) => updateField("pickupTime", e.target.value)} />
-            </label>
+          <div className="journeySection">
+            <div className="sectionHeading">
+              <strong>Outbound trip</strong>
+              <span>When the journey starts and finishes.</span>
+            </div>
+            <div className="two">
+              <label>
+                Pickup Date
+                <input type="date" value={form.pickupDate} onChange={(e) => updateField("pickupDate", e.target.value)} />
+              </label>
+              <label>
+                Pickup Time
+                <input type="time" value={form.pickupTime} onChange={(e) => updateField("pickupTime", e.target.value)} />
+              </label>
+            </div>
+            <div className="two">
+              <label>
+                Drop-off Date
+                <input type="date" value={form.dropoffDate} onChange={(e) => updateField("dropoffDate", e.target.value)} />
+              </label>
+              <label>
+                Drop-off Time
+                <input type="time" value={form.dropoffTime} onChange={(e) => updateField("dropoffTime", e.target.value)} />
+              </label>
+            </div>
           </div>
 
-          <div className="two">
-            <label>
-              Return Date
-              <input type="date" value={form.returnDate} onChange={(e) => updateField("returnDate", e.target.value)} />
-            </label>
-            <label>
-              Return Time
-              <input type="time" value={form.returnTime} onChange={(e) => updateField("returnTime", e.target.value)} />
-            </label>
-          </div>
+          <label className="checkboxCard">
+            <span className="checkboxRow">
+              <input
+                type="checkbox"
+                checked={form.hasReturnTrip}
+                onChange={(e) => updateField("hasReturnTrip", e.target.checked)}
+              />
+              <span>
+                <strong>Add return trip</strong>
+                <small>Show return pickup and drop-off date/time fields.</small>
+              </span>
+            </span>
+          </label>
+
+          {form.hasReturnTrip && (
+            <div className="journeySection">
+              <div className="sectionHeading">
+                <strong>Return trip</strong>
+                <span>
+                  {form.pickupLocation && form.dropoffLocation
+                    ? `Return route: ${form.dropoffLocation} → ${form.pickupLocation}.`
+                    : "Return route will appear once pickup and drop-off locations are entered."}
+                </span>
+              </div>
+              <div className="two">
+                <label>
+                  Return Pickup Date
+                  <input type="date" value={form.returnPickupDate} onChange={(e) => updateField("returnPickupDate", e.target.value)} />
+                </label>
+                <label>
+                  Return Pickup Time
+                  <input type="time" value={form.returnPickupTime} onChange={(e) => updateField("returnPickupTime", e.target.value)} />
+                </label>
+              </div>
+              <div className="two">
+                <label>
+                  Return Drop-off Date
+                  <input type="date" value={form.returnDropoffDate} onChange={(e) => updateField("returnDropoffDate", e.target.value)} />
+                </label>
+                <label>
+                  Return Drop-off Time
+                  <input type="time" value={form.returnDropoffTime} onChange={(e) => updateField("returnDropoffTime", e.target.value)} />
+                </label>
+              </div>
+            </div>
+          )}
 
           <label>
             Pickup Location
@@ -708,7 +847,7 @@ function App({ user }) {
                         <div className="dayTrips">
                           {dayTrips.slice(0, 2).map((trip) => {
                             const isPickupDay = trip.pickupDate === dateStr;
-                            const isReturnDay = (trip.returnDate || trip.dropoffDate) === dateStr;
+                            const isReturnDay = getTripEndDate(trip) === dateStr;
                             return (
                               <div
                                 key={trip.id}
@@ -719,7 +858,7 @@ function App({ user }) {
                               >
                                 <span className="tripTime">
                                   {isPickupDay ? `↗ ${trip.pickupTime}` :
-                                   isReturnDay ? `↙ ${trip.returnTime || trip.dropoffTime}` :
+                                   isReturnDay ? `↙ ${getTripEndTime(trip)}` :
                                    "━━━"}
                                 </span>
                                 <span className="tripCustomer">{trip.customerName}</span>
@@ -760,9 +899,16 @@ function App({ user }) {
 
                       <div className="details">
                         <p><Bus size={16} /> {trip.vehicleType}</p>
-                        <p><Clock size={16} /> Pickup: {trip.pickupDate} at {trip.pickupTime}</p>
-                        <p><Clock size={16} /> Return: {trip.returnDate || trip.dropoffDate} at {trip.returnTime || trip.dropoffTime}</p>
+                        <p><Clock size={16} /> Outbound pickup: {formatDateTime(trip.pickupDate, trip.pickupTime)}</p>
+                        <p><Clock size={16} /> Outbound drop-off: {formatDateTime(getOutboundDropoffDate(trip), getOutboundDropoffTime(trip))}</p>
+                        {hasReturnTrip(trip) && (
+                          <>
+                            <p><Clock size={16} /> Return pickup: {formatDateTime(trip.returnPickupDate, trip.returnPickupTime)}</p>
+                            <p><Clock size={16} /> Return drop-off: {formatDateTime(trip.returnDropoffDate, trip.returnDropoffTime)}</p>
+                          </>
+                        )}
                         <p><MapPin size={16} /> {trip.pickupLocation} → {trip.dropoffLocation}</p>
+                        {hasReturnTrip(trip) && <p><MapPin size={16} /> Return route: {trip.dropoffLocation} → {trip.pickupLocation}</p>}
                         {trip.driverName && <p>Driver: {trip.driverName}</p>}
                         {trip.bookingReferenceNumber && <p>Ref: {trip.bookingReferenceNumber}</p>}
                         {trip.notes && <p className="notes">{trip.notes}</p>}
@@ -812,9 +958,16 @@ function App({ user }) {
                               </div>
                               <div className="details">
                                 <p><Bus size={16} /> {trip.vehicleType}</p>
-                                <p><Clock size={16} /> Pickup: {trip.pickupDate} at {trip.pickupTime}</p>
-                                <p><Clock size={16} /> Return: {trip.returnDate || trip.dropoffDate} at {trip.returnTime || trip.dropoffTime}</p>
+                                <p><Clock size={16} /> Outbound pickup: {formatDateTime(trip.pickupDate, trip.pickupTime)}</p>
+                                <p><Clock size={16} /> Outbound drop-off: {formatDateTime(getOutboundDropoffDate(trip), getOutboundDropoffTime(trip))}</p>
+                                {hasReturnTrip(trip) && (
+                                  <>
+                                    <p><Clock size={16} /> Return pickup: {formatDateTime(trip.returnPickupDate, trip.returnPickupTime)}</p>
+                                    <p><Clock size={16} /> Return drop-off: {formatDateTime(trip.returnDropoffDate, trip.returnDropoffTime)}</p>
+                                  </>
+                                )}
                                 <p><MapPin size={16} /> {trip.pickupLocation} → {trip.dropoffLocation}</p>
+                                {hasReturnTrip(trip) && <p><MapPin size={16} /> Return route: {trip.dropoffLocation} → {trip.pickupLocation}</p>}
                               </div>
                             </article>
                           ))}
@@ -866,26 +1019,56 @@ function App({ user }) {
                   <div className="detail-item">
                     <Clock size={16} />
                     <div>
-                      <span className="detail-label">Pickup</span>
-                      <span className="detail-value">{selectedTrip.pickupDate} at {selectedTrip.pickupTime}</span>
+                      <span className="detail-label">Outbound Pickup</span>
+                      <span className="detail-value">{formatDateTime(selectedTrip.pickupDate, selectedTrip.pickupTime)}</span>
                     </div>
                   </div>
 
                   <div className="detail-item">
                     <Clock size={16} />
                     <div>
-                      <span className="detail-label">Return</span>
-                      <span className="detail-value">{selectedTrip.returnDate || selectedTrip.dropoffDate} at {selectedTrip.returnTime || selectedTrip.dropoffTime}</span>
+                      <span className="detail-label">Outbound Drop-off</span>
+                      <span className="detail-value">{formatDateTime(getOutboundDropoffDate(selectedTrip), getOutboundDropoffTime(selectedTrip))}</span>
                     </div>
                   </div>
+
+                  {hasReturnTrip(selectedTrip) && (
+                    <>
+                      <div className="detail-item">
+                        <Clock size={16} />
+                        <div>
+                          <span className="detail-label">Return Pickup</span>
+                          <span className="detail-value">{formatDateTime(selectedTrip.returnPickupDate, selectedTrip.returnPickupTime)}</span>
+                        </div>
+                      </div>
+
+                      <div className="detail-item">
+                        <Clock size={16} />
+                        <div>
+                          <span className="detail-label">Return Drop-off</span>
+                          <span className="detail-value">{formatDateTime(selectedTrip.returnDropoffDate, selectedTrip.returnDropoffTime)}</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   <div className="detail-item">
                     <MapPin size={16} />
                     <div>
-                      <span className="detail-label">Route</span>
+                      <span className="detail-label">Outbound Route</span>
                       <span className="detail-value">{selectedTrip.pickupLocation} → {selectedTrip.dropoffLocation}</span>
                     </div>
                   </div>
+
+                  {hasReturnTrip(selectedTrip) && (
+                    <div className="detail-item">
+                      <MapPin size={16} />
+                      <div>
+                        <span className="detail-label">Return Route</span>
+                        <span className="detail-value">{selectedTrip.dropoffLocation} → {selectedTrip.pickupLocation}</span>
+                      </div>
+                    </div>
+                  )}
 
                   {selectedTrip.driverName && (
                     <div className="detail-item">
@@ -952,9 +1135,16 @@ function App({ user }) {
                     </div>
                     <div className="details">
                       <p><Bus size={16} /> {trip.vehicleType}</p>
-                      <p><Clock size={16} /> Pickup: {trip.pickupDate} at {trip.pickupTime}</p>
-                      <p><Clock size={16} /> Return: {trip.returnDate || trip.dropoffDate} at {trip.returnTime || trip.dropoffTime}</p>
+                      <p><Clock size={16} /> Outbound pickup: {formatDateTime(trip.pickupDate, trip.pickupTime)}</p>
+                      <p><Clock size={16} /> Outbound drop-off: {formatDateTime(getOutboundDropoffDate(trip), getOutboundDropoffTime(trip))}</p>
+                      {hasReturnTrip(trip) && (
+                        <>
+                          <p><Clock size={16} /> Return pickup: {formatDateTime(trip.returnPickupDate, trip.returnPickupTime)}</p>
+                          <p><Clock size={16} /> Return drop-off: {formatDateTime(trip.returnDropoffDate, trip.returnDropoffTime)}</p>
+                        </>
+                      )}
                       <p><MapPin size={16} /> {trip.pickupLocation} → {trip.dropoffLocation}</p>
+                      {hasReturnTrip(trip) && <p><MapPin size={16} /> Return route: {trip.dropoffLocation} → {trip.pickupLocation}</p>}
                     </div>
                   </article>
                 ))}

@@ -10,31 +10,46 @@ export const tripFromRow = (row) => ({
   dropoffLocation: row.dropoff_location ?? "",
   pickupDate: row.pickup_date ?? "",
   pickupTime: row.pickup_time ?? "",
-  returnDate: row.return_date ?? "",
-  returnTime: row.return_time ?? "",
+  dropoffDate: row.return_date ?? "",
+  dropoffTime: row.return_time ?? "",
+  hasReturnTrip: row.has_return_trip ?? false,
+  returnPickupDate: row.return_pickup_date ?? "",
+  returnPickupTime: row.return_pickup_time ?? "",
+  returnDropoffDate: row.return_dropoff_date ?? "",
+  returnDropoffTime: row.return_dropoff_time ?? "",
   driverName: row.driver_name ?? "",
   notes: row.notes ?? "",
   status: row.status ?? "Scheduled",
   createdAt: row.created_at ?? new Date().toISOString(),
 });
 
-export const tripToRow = (trip, userId) => ({
-  id: trip.id,
-  user_id: userId,
-  customer_name: trip.customerName ?? "",
-  booking_reference_number: trip.bookingReferenceNumber ?? "",
-  vehicle_type: trip.vehicleType ?? "",
-  pickup_location: trip.pickupLocation ?? "",
-  dropoff_location: trip.dropoffLocation ?? "",
-  pickup_date: trip.pickupDate || null,
-  pickup_time: trip.pickupTime || null,
-  return_date: trip.returnDate || trip.dropoffDate || null,
-  return_time: trip.returnTime || trip.dropoffTime || null,
-  driver_name: trip.driverName ?? "",
-  notes: trip.notes ?? "",
-  status: trip.status ?? "Scheduled",
-  created_at: trip.createdAt || new Date().toISOString(),
-});
+export const tripToRow = (trip, userId) => {
+  const outboundDropoffDate = trip.dropoffDate !== undefined ? trip.dropoffDate : trip.returnDate;
+  const outboundDropoffTime = trip.dropoffTime !== undefined ? trip.dropoffTime : trip.returnTime;
+
+  return {
+    id: trip.id,
+    user_id: userId,
+    customer_name: trip.customerName ?? "",
+    booking_reference_number: trip.bookingReferenceNumber ?? "",
+    vehicle_type: trip.vehicleType ?? "",
+    pickup_location: trip.pickupLocation ?? "",
+    dropoff_location: trip.dropoffLocation ?? "",
+    pickup_date: trip.pickupDate || null,
+    pickup_time: trip.pickupTime || null,
+    return_date: outboundDropoffDate || null,
+    return_time: outboundDropoffTime || null,
+    has_return_trip: Boolean(trip.hasReturnTrip),
+    return_pickup_date: trip.returnPickupDate || null,
+    return_pickup_time: trip.returnPickupTime || null,
+    return_dropoff_date: trip.returnDropoffDate || null,
+    return_dropoff_time: trip.returnDropoffTime || null,
+    driver_name: trip.driverName ?? "",
+    notes: trip.notes ?? "",
+    status: trip.status ?? "Scheduled",
+    created_at: trip.createdAt || new Date().toISOString(),
+  };
+};
 
 export const namedFromRow = (row) => ({
   id: row.id,
