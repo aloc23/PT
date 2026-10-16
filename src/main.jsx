@@ -568,7 +568,7 @@ function App({ user, signOut }) {
       {syncLoading && <div className="migratePrompt">Loading your bookings…</div>}
       {syncError && (
         <div className="migratePrompt">
-          Couldn't reach the server. Showing saved data on this device; changes will sync when you're back online.
+          Not saved to cloud: {syncError.message || "couldn't reach the server"}. Showing saved data on this device; changes will retry automatically.
         </div>
       )}
 

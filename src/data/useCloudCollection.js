@@ -111,7 +111,8 @@ export function useCloudCollection(collectionName, user) {
     if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
     const ops = queueRef.current;
-    const stillPending = [];
+    const done = new Set();
+    let lastError = null;
 
     for (const op of ops) {
       try {
@@ -128,16 +129,19 @@ export function useCloudCollection(collectionName, user) {
             .eq("user_id", userId);
           if (error) throw error;
         }
+        done.add(op);
       } catch (err) {
         // Keep this op for the next retry. If we keep failing, the user will
         // still have the changes locally — they just won't sync until online.
-        stillPending.push(op);
+        lastError = err;
         console.warn(`[cloud:${collectionName}] queued op failed`, err);
       }
     }
 
-    queueRef.current = stillPending;
+    // Preserve ops enqueued while this flush was awaiting the network.
+    queueRef.current = queueRef.current.filter((op) => !done.has(op));
     persistQueue();
+    setError(lastError);
   }, [userId, cloudUserId, collectionName, config.table, persistQueue]);
 
   // ---- Initial load: hydrate from cache → fetch fresh ----------------------
@@ -167,7 +171,21 @@ export function useCloudCollection(collectionName, user) {
         if (error) throw error;
         if (cancelled) return;
 
-        const fresh = (data || []).map(config.fromRow);
+        let fresh = (data || []).map(config.fromRow);
+        // Don't clobber unsynced local changes: re-apply pending ops on top.
+        if (queueRef.current.length > 0) {
+          const local = new Map(itemsRef.current.map((it) => [it.id, it]));
+          const byId = new Map(fresh.map((it) => [it.id, it]));
+          for (const op of queueRef.current) {
+            if (op.type === "upsert") {
+              const item = local.get(op.row.id);
+              if (item) byId.set(item.id, item);
+            } else if (op.type === "delete") {
+              byId.delete(op.id);
+            }
+          }
+          fresh = [...byId.values()];
+        }
         setItemsState(fresh);
         itemsRef.current = fresh;
         writeJSON(cacheKey(userId, collectionName), fresh);
