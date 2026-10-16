@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import "./styles.css";
 import { useCloudCollection } from "./data/useCloudCollection.js";
+import AuthGate from "./auth/AuthGate.jsx";
 
 const emptyForm = {
   customerName: "",
@@ -71,19 +72,42 @@ function formatDateTime(date, time) {
   return date || time || "—";
 }
 
-// ---------- Top-level: app is open, no sign-in required ---------------------
+// ---------- Top-level: gate the app behind sign-in --------------------------
+
+// Legacy device data: the original "bus_*" keys plus the local-only cache
+// written while the app briefly ran without sign-in.
+function readLegacy(name) {
+  const read = (key) => {
+    try { return JSON.parse(localStorage.getItem(key) || "[]"); } catch { return []; }
+  };
+  return [...read(`bus_${name}`), ...read(`pt_cache_${name}_local`)];
+}
+function clearLegacy() {
+  ["trips", "drivers", "vehicles"].forEach((n) => {
+    localStorage.removeItem(`bus_${n}`);
+    localStorage.removeItem(`pt_cache_${n}_local`);
+    localStorage.removeItem(`pt_queue_${n}_local`);
+  });
+}
 
 function Root() {
-  return <App user={null} />;
+  return (
+    <AuthGate>
+      {(user, signOut) => <App key={user.id} user={user} signOut={signOut} />}
+    </AuthGate>
+  );
 }
 
 // ---------- The original app, rewired to the cloud --------------------------
 
-function App({ user }) {
+function App({ user, signOut }) {
   const [form, setForm] = useState(emptyForm);
   const [trips, setTrips, tripsMeta] = useCloudCollection("trips", user);
   const [drivers, setDrivers, driversMeta] = useCloudCollection("drivers", user);
   const [vehicles, setVehicles, vehiclesMeta] = useCloudCollection("vehicles", user);
+
+  const syncError = tripsMeta.error || driversMeta.error || vehiclesMeta.error;
+  const syncLoading = [tripsMeta, driversMeta, vehiclesMeta].some((m) => m.status === "loading");
 
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState(
@@ -142,16 +166,17 @@ function App({ user }) {
     if (tripsMeta.status !== "ready" || driversMeta.status !== "ready" || vehiclesMeta.status !== "ready") return;
     const hasLegacy =
       !!localStorage.getItem("bus_trips") ||
-      !!localStorage.getItem("bus_drivers");
+      !!localStorage.getItem("bus_drivers") ||
+      readLegacy("trips").length > 0;
     if (hasLegacy && migrateState === "idle") setMigrateState("available");
   }, [tripsMeta.status, driversMeta.status, vehiclesMeta.status, migrateState]);
 
   function runMigration() {
     setMigrateState("running");
     try {
-      const legacyTrips = JSON.parse(localStorage.getItem("bus_trips") || "[]");
-      const legacyDrivers = JSON.parse(localStorage.getItem("bus_drivers") || "[]");
-      const legacyVehicles = JSON.parse(localStorage.getItem("bus_vehicles") || "[]");
+      const legacyTrips = readLegacy("trips");
+      const legacyDrivers = readLegacy("drivers");
+      const legacyVehicles = readLegacy("vehicles");
 
       // Avoid duplicates by name where reasonable
       const existingDriverNames = new Set(drivers.map((d) => d.name.toLowerCase()));
@@ -166,7 +191,8 @@ function App({ user }) {
         .map((v) => ({ id: crypto.randomUUID(), name: v.name }));
       if (vehiclesToAdd.length > 0) setVehicles([...vehicles, ...vehiclesToAdd]);
 
-      const tripsToAdd = legacyTrips.map((t) => ({
+      const existingTripIds = new Set(trips.map((t) => t.id));
+      const tripsToAdd = legacyTrips.filter((t) => !t?.id || !existingTripIds.has(t.id)).map((t) => ({
         ...t,
         id: t.id || crypto.randomUUID(),
         createdAt: t.createdAt || new Date().toISOString(),
@@ -175,9 +201,7 @@ function App({ user }) {
 
       // Clear legacy keys so we don't prompt again. (Keep bus_viewMode — that's
       // a per-device UI preference, not synced.)
-      localStorage.removeItem("bus_trips");
-      localStorage.removeItem("bus_drivers");
-      localStorage.removeItem("bus_vehicles");
+      clearLegacy();
       setMigrateState("done");
     } catch (err) {
       console.warn("migration failed", err);
@@ -186,9 +210,7 @@ function App({ user }) {
   }
 
   function dismissMigration() {
-    localStorage.removeItem("bus_trips");
-    localStorage.removeItem("bus_drivers");
-    localStorage.removeItem("bus_vehicles");
+    clearLegacy();
     setMigrateState("done");
   }
 
@@ -524,8 +546,10 @@ function App({ user }) {
           <div className="sessionBar">
             <span className={`syncBadge ${isOnline ? "" : "offline"}`}>
               {isOnline ? <Cloud size={14} /> : <CloudOff size={14} />}
-              {isOnline ? "Local mode" : "Offline"}
+              {isOnline ? "Synced" : "Offline"}
             </span>
+            <span className="sessionEmail">{user.email}</span>
+            <button type="button" className="signOutBtn" onClick={signOut}>Sign out</button>
           </div>
 
           <p className="eyebrow">Priority Transfers</p>
@@ -540,6 +564,13 @@ function App({ user }) {
           <span>Total trips</span>
         </div>
       </section>
+
+      {syncLoading && <div className="migratePrompt">Loading your bookings…</div>}
+      {syncError && (
+        <div className="migratePrompt">
+          Couldn't reach the server. Showing saved data on this device; changes will sync when you're back online.
+        </div>
+      )}
 
       {migrateState === "available" && (
         <div className="migratePrompt">
