@@ -151,6 +151,8 @@ supabase/
 - Pick vehicle type and manage the vehicle list (add / rename / delete)
 - Outbound pickup/drop-off timing plus an optional return-trip section
 - Pickup and drop-off locations
+- Edit existing bookings (pencil icon in the list, or **Edit Trip** in the
+  details modal); changes re-check vehicle availability and sync via Supabase
 - Driver management (add / rename / delete; renames propagate to existing
   trips)
 - Status tracking (Scheduled, In Progress, Completed, Cancelled)
@@ -174,7 +176,6 @@ supabase/
 ## Next improvements
 
 - Driver availability checks (prevent double-booking a driver too)
-- Edit existing trips inline
 - Export schedules to CSV / PDF
 - Native mobile shell (PWA install / Capacitor) on top of this same
   cloud backend
