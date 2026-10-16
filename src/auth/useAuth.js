@@ -29,9 +29,9 @@ export function useAuth() {
     user: session?.user ?? null,
     loading,
     signOut: async () => {
-      // Drop this device's cached bookings so nothing lingers after sign-out.
+      // Drop this device's cached data (unsynced queues are kept) after sign-out.
       Object.keys(localStorage)
-        .filter((k) => k.startsWith("pt_cache_") || k.startsWith("pt_queue_"))
+        .filter((k) => k.startsWith("pt_cache_"))
         .filter((k) => !k.endsWith("_local"))
         .forEach((k) => localStorage.removeItem(k));
       return supabase.auth.signOut();
