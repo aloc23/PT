@@ -24,6 +24,23 @@ const writeJSON = (key, value) => {
   }
 };
 
+// Turn schema-mismatch errors (missing column/table) into an actionable message.
+function describeError(err, table) {
+  const code = err?.code;
+  const msg = err?.message || "";
+  if (
+    code === "PGRST204" || code === "PGRST205" || code === "42703" || code === "42P01" ||
+    /column .* (of relation|does not exist)|schema cache/i.test(msg)
+  ) {
+    const wrapped = new Error(
+      `Database schema is out of date for "${table}" (${msg}). Run all SQL files in supabase/migrations/ in the Supabase SQL Editor`
+    );
+    wrapped.code = code;
+    return wrapped;
+  }
+  return err;
+}
+
 // Diff two arrays of {id, ...} by id, returning {inserts, updates, deletes}.
 function diff(prev, next) {
   const prevById = new Map(prev.map((it) => [it.id, it]));
@@ -122,18 +139,16 @@ export function useCloudCollection(collectionName, user) {
             .upsert(op.row, { onConflict: "id" });
           if (error) throw error;
         } else if (op.type === "delete") {
-          const { error } = await supabase
-            .from(config.table)
-            .delete()
-            .eq("id", op.id)
-            .eq("user_id", userId);
+          let q = supabase.from(config.table).delete().eq("id", op.id);
+          if (!config.shared) q = q.eq("user_id", userId);
+          const { error } = await q;
           if (error) throw error;
         }
         done.add(op);
       } catch (err) {
         // Keep this op for the next retry. If we keep failing, the user will
         // still have the changes locally — they just won't sync until online.
-        lastError = err;
+        lastError = describeError(err, config.table);
         console.warn(`[cloud:${collectionName}] queued op failed`, err);
       }
     }
@@ -142,7 +157,7 @@ export function useCloudCollection(collectionName, user) {
     queueRef.current = queueRef.current.filter((op) => !done.has(op));
     persistQueue();
     setError(lastError);
-  }, [userId, cloudUserId, collectionName, config.table, persistQueue]);
+  }, [userId, cloudUserId, collectionName, config.table, config.shared, persistQueue]);
 
   // ---- Initial load: hydrate from cache → fetch fresh ----------------------
 
@@ -163,11 +178,9 @@ export function useCloudCollection(collectionName, user) {
         // Drain any queued offline writes first so the server reflects them.
         await flushQueue();
 
-        const { data, error } = await supabase
-          .from(config.table)
-          .select("*")
-          .eq("user_id", userId)
-          .order("created_at", { ascending: true });
+        let query = supabase.from(config.table).select("*");
+        if (!config.shared) query = query.eq("user_id", userId);
+        const { data, error } = await query.order("created_at", { ascending: true });
         if (error) throw error;
         if (cancelled) return;
 
@@ -193,7 +206,7 @@ export function useCloudCollection(collectionName, user) {
       } catch (err) {
         if (cancelled) return;
         console.warn(`[cloud:${collectionName}] initial fetch failed`, err);
-        setError(err);
+        setError(describeError(err, config.table));
         // Stay on cached data; mark ready so the UI isn't blocked.
         setStatus("ready");
       }
@@ -218,7 +231,7 @@ export function useCloudCollection(collectionName, user) {
           event: "*",
           schema: "public",
           table: config.table,
-          filter: `user_id=eq.${userId}`,
+          ...(config.shared ? {} : { filter: `user_id=eq.${userId}` }),
         },
         (payload) => {
           const { eventType, new: newRow, old: oldRow } = payload;
@@ -247,7 +260,7 @@ export function useCloudCollection(collectionName, user) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, cloudUserId, collectionName, config.table, config.fromRow]);
+  }, [userId, cloudUserId, collectionName, config.table, config.shared, config.fromRow]);
 
   // ---- Re-flush when the browser comes back online -------------------------
 
