@@ -103,6 +103,181 @@ function Root() {
   );
 }
 
+function ScheduleFormFields({ form, updateField, vehicles, drivers, availability, onManageVehicles, onManageDrivers }) {
+  return (
+    <>
+    <label>
+      Customer / Company Name
+      <input value={form.customerName} onChange={(e) => updateField("customerName", e.target.value)} placeholder="Example: Dublin Tours Ltd" />
+    </label>
+
+    <label>
+      Booking Reference Number
+      <input value={form.bookingReferenceNumber} onChange={(e) => updateField("bookingReferenceNumber", e.target.value)} placeholder="e.g. BRN-12345" />
+    </label>
+
+    <label>
+      Vehicle Type
+      <div className="driverInputRow">
+        <select value={form.vehicleType} onChange={(e) => updateField("vehicleType", e.target.value)}>
+          {form.vehicleType && !vehicles.some((v) => v.name === form.vehicleType) && (
+            <option value={form.vehicleType} aria-label={`Vehicle not found: ${form.vehicleType}`}>(missing) {form.vehicleType}</option>
+          )}
+          {vehicles.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
+        </select>
+        <button
+          type="button"
+          className="addDriverBtn"
+          onClick={() => onManageVehicles()}
+          title="Manage vehicles"
+        >
+          <Settings size={16} />
+          Manage
+        </button>
+      </div>
+      {availability === false && (
+        <div className="availability-warning">
+          ⚠️ This vehicle type is not available for the selected dates
+        </div>
+      )}
+      {availability === true && form.pickupDate && (form.hasReturnTrip ? form.returnDropoffDate : form.dropoffDate) && (
+        <div className="availability-success">
+          ✅ This vehicle type is available for the selected dates
+        </div>
+      )}
+    </label>
+
+    <div className="journeySection">
+      <div className="sectionHeading">
+        <strong>Outbound trip</strong>
+        <span>When the journey starts and finishes.</span>
+      </div>
+      <div className="two">
+        <label>
+          Pickup Date
+          <input type="date" value={form.pickupDate} onChange={(e) => updateField("pickupDate", e.target.value)} />
+        </label>
+        <label>
+          Pickup Time
+          <input type="time" value={form.pickupTime} onChange={(e) => updateField("pickupTime", e.target.value)} />
+        </label>
+      </div>
+      <div className="two">
+        <label>
+          Drop-off Date
+          <input type="date" value={form.dropoffDate} onChange={(e) => updateField("dropoffDate", e.target.value)} />
+        </label>
+        <label>
+          Drop-off Time
+          <input type="time" value={form.dropoffTime} onChange={(e) => updateField("dropoffTime", e.target.value)} />
+        </label>
+      </div>
+    </div>
+
+    <label className="checkboxCard">
+      <span className="checkboxRow">
+        <input
+          type="checkbox"
+          checked={form.hasReturnTrip}
+          onChange={(e) => updateField("hasReturnTrip", e.target.checked)}
+        />
+        <span>
+          <strong>Add return trip</strong>
+          <small>Show return pickup and drop-off date/time fields.</small>
+        </span>
+      </span>
+    </label>
+
+    {form.hasReturnTrip && (
+      <div className="journeySection">
+        <div className="sectionHeading">
+          <strong>Return trip</strong>
+          <span>
+            {form.pickupLocation && form.dropoffLocation
+              ? `Return route: ${form.dropoffLocation} → ${form.pickupLocation}.`
+              : "Return route will appear once pickup and drop-off locations are entered."}
+          </span>
+        </div>
+        <div className="two">
+          <label>
+            Return Pickup Date
+            <input type="date" value={form.returnPickupDate} onChange={(e) => updateField("returnPickupDate", e.target.value)} />
+          </label>
+          <label>
+            Return Pickup Time
+            <input type="time" value={form.returnPickupTime} onChange={(e) => updateField("returnPickupTime", e.target.value)} />
+          </label>
+        </div>
+        <div className="two">
+          <label>
+            Return Drop-off Date
+            <input type="date" value={form.returnDropoffDate} onChange={(e) => updateField("returnDropoffDate", e.target.value)} />
+          </label>
+          <label>
+            Return Drop-off Time
+            <input type="time" value={form.returnDropoffTime} onChange={(e) => updateField("returnDropoffTime", e.target.value)} />
+          </label>
+        </div>
+      </div>
+    )}
+
+    <label>
+      Pickup Location
+      <input value={form.pickupLocation} onChange={(e) => updateField("pickupLocation", e.target.value)} placeholder="Airport Terminal 1" />
+    </label>
+
+    <label>
+      Drop-off Location
+      <input value={form.dropoffLocation} onChange={(e) => updateField("dropoffLocation", e.target.value)} placeholder="City Centre Hotel" />
+    </label>
+
+    <label>
+      Driver
+      <div className="driverInputRow">
+        <select
+          value={form.driverName}
+          onChange={(e) => updateField("driverName", e.target.value)}
+        >
+          <option value="">— Select driver —</option>
+          {drivers.map((d) => (
+            <option key={d.id} value={d.name}>{d.name}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="addDriverBtn"
+          onClick={() => onManageDrivers()}
+          title="Manage drivers"
+        >
+          <Settings size={16} />
+          Manage
+        </button>
+      </div>
+    </label>
+
+    <label>
+      Price
+      <input type="number" min="0" step="0.01" inputMode="decimal" value={form.price} onChange={(e) => updateField("price", e.target.value)} placeholder="0.00" />
+    </label>
+
+    <label>
+      Status
+      <select value={form.status} onChange={(e) => updateField("status", e.target.value)}>
+        <option>Scheduled</option>
+        <option>In Progress</option>
+        <option>Completed</option>
+        <option>Cancelled</option>
+      </select>
+    </label>
+
+    <label>
+      Notes
+      <textarea value={form.notes} onChange={(e) => updateField("notes", e.target.value)} placeholder="Passenger count, luggage, route notes..." />
+    </label>
+    </>
+  );
+}
+
 // ---------- The original app, rewired to the cloud --------------------------
 
 function App({ user, signOut }) {
@@ -120,6 +295,8 @@ function App({ user, signOut }) {
   );
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedTrip, setSelectedTrip] = useState(null);
+  const [editingTripId, setEditingTripId] = useState(null);
+  const [editForm, setEditForm] = useState(emptyForm);
   const [selectedDayData, setSelectedDayData] = useState(null);
 
   // Driver management state
@@ -245,6 +422,22 @@ function App({ user, signOut }) {
     trips,
   ]);
 
+  const isEditSelectionAvailable = useMemo(() => {
+    if (!editingTripId) return null;
+    const endDate = editForm.hasReturnTrip ? editForm.returnDropoffDate : editForm.dropoffDate;
+    const endTime = editForm.hasReturnTrip ? editForm.returnDropoffTime : editForm.dropoffTime;
+    if (!editForm.vehicleType || !editForm.pickupDate || !endDate) return null;
+    return isVehicleAvailable(
+      editForm.vehicleType,
+      editForm.pickupDate,
+      editForm.pickupTime,
+      endDate,
+      endTime,
+      editingTripId
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingTripId, editForm, trips]);
+
   const filteredTrips = useMemo(() => {
     const q = search.toLowerCase();
     return trips
@@ -284,52 +477,54 @@ function App({ user, signOut }) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  function addTrip(event) {
-    event.preventDefault();
+  function validateTripForm(f, excludeTripId = null) {
+    const pickup = toDateTime(f.pickupDate, f.pickupTime);
+    const outboundDropoff = toDateTime(f.dropoffDate, f.dropoffTime);
+    const returnPickup = toDateTime(f.returnPickupDate, f.returnPickupTime);
+    const returnDropoff = toDateTime(f.returnDropoffDate, f.returnDropoffTime);
+    const bookingEndDate = f.hasReturnTrip ? f.returnDropoffDate : f.dropoffDate;
+    const bookingEndTime = f.hasReturnTrip ? f.returnDropoffTime : f.dropoffTime;
 
-    const pickup = toDateTime(form.pickupDate, form.pickupTime);
-    const outboundDropoff = toDateTime(form.dropoffDate, form.dropoffTime);
-    const returnPickup = toDateTime(form.returnPickupDate, form.returnPickupTime);
-    const returnDropoff = toDateTime(form.returnDropoffDate, form.returnDropoffTime);
-    const bookingEndDate = form.hasReturnTrip ? form.returnDropoffDate : form.dropoffDate;
-    const bookingEndTime = form.hasReturnTrip ? form.returnDropoffTime : form.dropoffTime;
-
-    if (!form.customerName || !form.pickupLocation || !form.dropoffLocation || !pickup || !outboundDropoff) {
+    if (!f.customerName || !f.pickupLocation || !f.dropoffLocation || !pickup || !outboundDropoff) {
       alert("Please fill in customer, locations, pickup date/time, and drop-off date/time.");
-      return;
+      return false;
     }
 
     if (outboundDropoff <= pickup) {
       alert("Drop-off date/time must be after pickup date/time.");
-      return;
+      return false;
     }
 
-    if (form.hasReturnTrip && (!returnPickup || !returnDropoff)) {
+    if (f.hasReturnTrip && (!returnPickup || !returnDropoff)) {
       alert("Please add the return pickup and return drop-off date/time.");
-      return;
+      return false;
     }
 
-    if (form.hasReturnTrip && returnPickup <= outboundDropoff) {
+    if (f.hasReturnTrip && returnPickup <= outboundDropoff) {
       alert("Return pickup date/time must be after the outbound drop-off date/time.");
-      return;
+      return false;
     }
 
-    if (form.hasReturnTrip && returnDropoff <= returnPickup) {
+    if (f.hasReturnTrip && returnDropoff <= returnPickup) {
       alert("Return drop-off date/time must be after the return pickup date/time.");
-      return;
+      return false;
     }
 
-    if (!isVehicleAvailable(form.vehicleType, form.pickupDate, form.pickupTime, bookingEndDate, bookingEndTime)) {
-      alert(`${form.vehicleType} is not available for the selected dates. Please choose different dates or another vehicle type.`);
-      return;
+    if (!isVehicleAvailable(f.vehicleType, f.pickupDate, f.pickupTime, bookingEndDate, bookingEndTime, excludeTripId)) {
+      alert(`${f.vehicleType} is not available for the selected dates. Please choose different dates or another vehicle type.`);
+      return false;
     }
 
-    const returnTripFields = form.hasReturnTrip
+    return true;
+  }
+
+  function clearedReturnFields(f) {
+    return f.hasReturnTrip
       ? {
-          returnPickupDate: form.returnPickupDate,
-          returnPickupTime: form.returnPickupTime,
-          returnDropoffDate: form.returnDropoffDate,
-          returnDropoffTime: form.returnDropoffTime,
+          returnPickupDate: f.returnPickupDate,
+          returnPickupTime: f.returnPickupTime,
+          returnDropoffDate: f.returnDropoffDate,
+          returnDropoffTime: f.returnDropoffTime,
         }
       : {
           returnPickupDate: "",
@@ -337,16 +532,59 @@ function App({ user, signOut }) {
           returnDropoffDate: "",
           returnDropoffTime: "",
         };
+  }
+
+  function addTrip(event) {
+    event.preventDefault();
+    if (!validateTripForm(form)) return;
 
     const newTrip = {
       ...form,
-      ...returnTripFields,
+      ...clearedReturnFields(form),
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
     };
 
     setTrips([...trips, newTrip]);
     setForm(emptyForm);
+  }
+
+  function updateEditField(field, value) {
+    setEditForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function startEditTrip(trip) {
+    setEditForm({
+      ...emptyForm,
+      ...trip,
+      dropoffDate: getOutboundDropoffDate(trip) || "",
+      dropoffTime: getOutboundDropoffTime(trip) || "",
+      price: trip.price ?? "",
+    });
+    setEditingTripId(trip.id);
+    setSelectedTrip(trip);
+  }
+
+  function cancelEditTrip() {
+    setEditingTripId(null);
+    setEditForm(emptyForm);
+  }
+
+  function saveEditTrip(event) {
+    event.preventDefault();
+    if (!validateTripForm(editForm, editingTripId)) return;
+
+    const original = trips.find((t) => t.id === editingTripId);
+    const updatedTrip = {
+      ...editForm,
+      ...clearedReturnFields(editForm),
+      id: editingTripId,
+      createdAt: original?.createdAt || editForm.createdAt || new Date().toISOString(),
+    };
+
+    setTrips(trips.map((t) => (t.id === editingTripId ? updatedTrip : t)));
+    setSelectedTrip(updatedTrip);
+    cancelEditTrip();
   }
 
   function deleteTrip(id) {
@@ -539,7 +777,7 @@ function App({ user, signOut }) {
   }
 
   function openTripModal(trip) { setSelectedTrip(trip); }
-  function closeTripModal() { setSelectedTrip(null); }
+  function closeTripModal() { setSelectedTrip(null); setEditingTripId(null); setEditForm(emptyForm); }
   function openDayModal(dateStr, dayTrips) { setSelectedDayData({ dateStr, trips: dayTrips }); }
   function closeDayModal() { setSelectedDayData(null); }
 
@@ -595,174 +833,15 @@ function App({ user, signOut }) {
         <form className="card form" onSubmit={addTrip}>
           <h2><Plus size={20} /> New Schedule</h2>
 
-          <label>
-            Customer / Company Name
-            <input value={form.customerName} onChange={(e) => updateField("customerName", e.target.value)} placeholder="Example: Dublin Tours Ltd" />
-          </label>
-
-          <label>
-            Booking Reference Number
-            <input value={form.bookingReferenceNumber} onChange={(e) => updateField("bookingReferenceNumber", e.target.value)} placeholder="e.g. BRN-12345" />
-          </label>
-
-          <label>
-            Vehicle Type
-            <div className="driverInputRow">
-              <select value={form.vehicleType} onChange={(e) => updateField("vehicleType", e.target.value)}>
-                {form.vehicleType && !vehicles.some((v) => v.name === form.vehicleType) && (
-                  <option value={form.vehicleType} aria-label={`Vehicle not found: ${form.vehicleType}`}>(missing) {form.vehicleType}</option>
-                )}
-                {vehicles.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
-              </select>
-              <button
-                type="button"
-                className="addDriverBtn"
-                onClick={() => setShowManageVehicles(true)}
-                title="Manage vehicles"
-              >
-                <Settings size={16} />
-                Manage
-              </button>
-            </div>
-            {isCurrentSelectionAvailable === false && (
-              <div className="availability-warning">
-                ⚠️ This vehicle type is not available for the selected dates
-              </div>
-            )}
-            {isCurrentSelectionAvailable === true && form.pickupDate && (form.hasReturnTrip ? form.returnDropoffDate : form.dropoffDate) && (
-              <div className="availability-success">
-                ✅ This vehicle type is available for the selected dates
-              </div>
-            )}
-          </label>
-
-          <div className="journeySection">
-            <div className="sectionHeading">
-              <strong>Outbound trip</strong>
-              <span>When the journey starts and finishes.</span>
-            </div>
-            <div className="two">
-              <label>
-                Pickup Date
-                <input type="date" value={form.pickupDate} onChange={(e) => updateField("pickupDate", e.target.value)} />
-              </label>
-              <label>
-                Pickup Time
-                <input type="time" value={form.pickupTime} onChange={(e) => updateField("pickupTime", e.target.value)} />
-              </label>
-            </div>
-            <div className="two">
-              <label>
-                Drop-off Date
-                <input type="date" value={form.dropoffDate} onChange={(e) => updateField("dropoffDate", e.target.value)} />
-              </label>
-              <label>
-                Drop-off Time
-                <input type="time" value={form.dropoffTime} onChange={(e) => updateField("dropoffTime", e.target.value)} />
-              </label>
-            </div>
-          </div>
-
-          <label className="checkboxCard">
-            <span className="checkboxRow">
-              <input
-                type="checkbox"
-                checked={form.hasReturnTrip}
-                onChange={(e) => updateField("hasReturnTrip", e.target.checked)}
-              />
-              <span>
-                <strong>Add return trip</strong>
-                <small>Show return pickup and drop-off date/time fields.</small>
-              </span>
-            </span>
-          </label>
-
-          {form.hasReturnTrip && (
-            <div className="journeySection">
-              <div className="sectionHeading">
-                <strong>Return trip</strong>
-                <span>
-                  {form.pickupLocation && form.dropoffLocation
-                    ? `Return route: ${form.dropoffLocation} → ${form.pickupLocation}.`
-                    : "Return route will appear once pickup and drop-off locations are entered."}
-                </span>
-              </div>
-              <div className="two">
-                <label>
-                  Return Pickup Date
-                  <input type="date" value={form.returnPickupDate} onChange={(e) => updateField("returnPickupDate", e.target.value)} />
-                </label>
-                <label>
-                  Return Pickup Time
-                  <input type="time" value={form.returnPickupTime} onChange={(e) => updateField("returnPickupTime", e.target.value)} />
-                </label>
-              </div>
-              <div className="two">
-                <label>
-                  Return Drop-off Date
-                  <input type="date" value={form.returnDropoffDate} onChange={(e) => updateField("returnDropoffDate", e.target.value)} />
-                </label>
-                <label>
-                  Return Drop-off Time
-                  <input type="time" value={form.returnDropoffTime} onChange={(e) => updateField("returnDropoffTime", e.target.value)} />
-                </label>
-              </div>
-            </div>
-          )}
-
-          <label>
-            Pickup Location
-            <input value={form.pickupLocation} onChange={(e) => updateField("pickupLocation", e.target.value)} placeholder="Airport Terminal 1" />
-          </label>
-
-          <label>
-            Drop-off Location
-            <input value={form.dropoffLocation} onChange={(e) => updateField("dropoffLocation", e.target.value)} placeholder="City Centre Hotel" />
-          </label>
-
-          <label>
-            Driver
-            <div className="driverInputRow">
-              <select
-                value={form.driverName}
-                onChange={(e) => updateField("driverName", e.target.value)}
-              >
-                <option value="">— Select driver —</option>
-                {drivers.map((d) => (
-                  <option key={d.id} value={d.name}>{d.name}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="addDriverBtn"
-                onClick={() => setShowManageDrivers(true)}
-                title="Manage drivers"
-              >
-                <Settings size={16} />
-                Manage
-              </button>
-            </div>
-          </label>
-
-          <label>
-            Price
-            <input type="number" min="0" step="0.01" inputMode="decimal" value={form.price} onChange={(e) => updateField("price", e.target.value)} placeholder="0.00" />
-          </label>
-
-          <label>
-            Status
-            <select value={form.status} onChange={(e) => updateField("status", e.target.value)}>
-              <option>Scheduled</option>
-              <option>In Progress</option>
-              <option>Completed</option>
-              <option>Cancelled</option>
-            </select>
-          </label>
-
-          <label>
-            Notes
-            <textarea value={form.notes} onChange={(e) => updateField("notes", e.target.value)} placeholder="Passenger count, luggage, route notes..." />
-          </label>
+          <ScheduleFormFields
+            form={form}
+            updateField={updateField}
+            vehicles={vehicles}
+            drivers={drivers}
+            availability={isCurrentSelectionAvailable}
+            onManageVehicles={() => setShowManageVehicles(true)}
+            onManageDrivers={() => setShowManageDrivers(true)}
+          />
 
           <button className="primary" type="submit">Add Schedule</button>
         </form>
@@ -906,6 +985,9 @@ function App({ user, signOut }) {
                           <h3>{trip.customerName}</h3>
                           <span className={`badge ${trip.status.toLowerCase().replace(" ", "-")}`}>{trip.status}</span>
                         </div>
+                        <button className="iconButton" onClick={() => { startEditTrip(trip); }} aria-label="Edit trip">
+                          <Pencil size={18} />
+                        </button>
                         <button className="iconButton" onClick={() => deleteTrip(trip.id)} aria-label="Delete trip">
                           <Trash2 size={18} />
                         </button>
@@ -1007,6 +1089,23 @@ function App({ user, signOut }) {
               <button className="modal-close" onClick={closeTripModal}>×</button>
             </div>
             <div className="modal-body">
+              {editingTripId === selectedTrip.id ? (
+                <form className="form" onSubmit={saveEditTrip}>
+                  <ScheduleFormFields
+                    form={editForm}
+                    updateField={updateEditField}
+                    vehicles={vehicles}
+                    drivers={drivers}
+                    availability={isEditSelectionAvailable}
+                    onManageVehicles={() => setShowManageVehicles(true)}
+                    onManageDrivers={() => setShowManageDrivers(true)}
+                  />
+                  <div className="modal-actions">
+                    <button className="primary" type="submit">Save Changes</button>
+                    <button className="secondary" type="button" onClick={cancelEditTrip}>Cancel</button>
+                  </div>
+                </form>
+              ) : (
               <div className="trip-detail-card">
                 <div className="trip-detail-header">
                   <h3>{selectedTrip.customerName}</h3>
@@ -1118,6 +1217,10 @@ function App({ user, signOut }) {
                 </div>
 
                 <div className="modal-actions">
+                  <button className="primary" onClick={() => startEditTrip(selectedTrip)}>
+                    <Pencil size={16} />
+                    Edit Trip
+                  </button>
                   <button className="danger" onClick={() => { deleteTrip(selectedTrip.id); closeTripModal(); }}>
                     <Trash2 size={16} />
                     Delete Trip
@@ -1125,6 +1228,7 @@ function App({ user, signOut }) {
                   <button className="secondary" onClick={closeTripModal}>Close</button>
                 </div>
               </div>
+              )}
             </div>
           </div>
         </div>
