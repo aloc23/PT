@@ -29,6 +29,7 @@ export const tripToRow = (trip, userId) => {
 
   return {
     id: trip.id,
+    user_id: userId,
     customer_name: trip.customerName ?? "",
     booking_reference_number: trip.bookingReferenceNumber ?? "",
     vehicle_type: trip.vehicleType ?? "",
@@ -46,9 +47,6 @@ export const tripToRow = (trip, userId) => {
     driver_name: trip.driverName ?? "",
     notes: trip.notes ?? "",
     status: trip.status ?? "Scheduled",
-    // Required (NOT NULL) by public.bookings.
-    trip_type: trip.hasReturnTrip ? "round_trip" : "one_way",
-    service_source: "web_app",
     created_at: trip.createdAt || new Date().toISOString(),
   };
 };
@@ -66,10 +64,8 @@ export const namedToRow = (item, userId) => ({
 
 export const collectionConfigs = {
   trips: {
-    // The "trips" collection is stored in the shared public.bookings table:
-    // every signed-in user reads/writes all rows (no user_id scoping).
-    table: "bookings",
-    shared: true,
+    // Bookings live in the per-user public.trips table, like drivers/vehicles.
+    table: "trips",
     fromRow: tripFromRow,
     toRow: tripToRow,
   },

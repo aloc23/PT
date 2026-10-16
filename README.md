@@ -28,9 +28,21 @@ Open **SQL Editor** in the Supabase dashboard and run the SQL files in
    (sets `user_id default auth.uid()` and re-applies the per-user RLS
    policies on the bookings table, called `trips`)
 
-**All three migrations are required for cross-device sync.** If `0002` is skipped, saving a booking fails and it stays only on the device that created it; the app shows a "Not saved to cloud" banner with the error.
+**All four migrations are required for cross-device sync.** If `0002` is skipped, saving a booking fails and it stays only on the device that created it; the app shows a "Not saved to cloud" banner with the error.
 
-**Shared bookings:** the app's `trips` collection is stored in the shared `public.bookings` table (created outside these migrations). Its existing RLS policy must let authenticated users select/insert/update/delete any row; the app no longer filters by `user_id`. Writes also send `trip_type` (`one_way`/`round_trip`) and `service_source` (`web_app`).
+4. [`0004_trips_realtime_and_sync.sql`](supabase/migrations/0004_trips_realtime_and_sync.sql)
+   (idempotently ensures `public.trips` has every column the app sends, RLS
+   policies, and Realtime publication)
+
+Bookings live in the per-user `trips` table, exactly like drivers and vehicles
+(`user_id` column, RLS `auth.uid() = user_id`). The old `public.bookings` table
+is no longer used; if you have rows there, copy them manually into
+`public.trips` (setting `user_id`) in the SQL editor.
+
+**Troubleshooting:** if a booking doesn't appear on other devices, check the
+"Not saved to cloud" banner — it shows the Supabase error (e.g. missing column
+or RLS violation). Queued writes are retried on load, when the browser comes
+back online, and after sign-in.
 
 This creates the per-user tables (`trips`, `drivers`, `vehicles`), enables
 Realtime broadcasts, and adds the optional return-trip fields used by the
