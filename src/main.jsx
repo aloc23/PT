@@ -73,6 +73,10 @@ function formatDateTime(date, time) {
   return date || time || "—";
 }
 
+function formatPrice(value) {
+  return `€${Number(value).toFixed(2)}`;
+}
+
 // ---------- Top-level: gate the app behind sign-in --------------------------
 
 // Legacy device data: the original "bus_*" keys plus the local-only cache
@@ -254,6 +258,7 @@ function App({ user, signOut }) {
           trip.dropoffLocation,
           trip.driverName,
           trip.status,
+          trip.price,
           getOutboundDropoffDate(trip),
           getOutboundDropoffTime(trip),
           trip.returnPickupDate,
@@ -908,6 +913,7 @@ function App({ user, signOut }) {
 
                       <div className="details">
                         <p><Bus size={16} /> {trip.vehicleType}</p>
+                        {trip.price !== "" && trip.price != null && <p>Price: {formatPrice(trip.price)}</p>}
                         <p><Clock size={16} /> Outbound pickup: {formatDateTime(trip.pickupDate, trip.pickupTime)}</p>
                         <p><Clock size={16} /> Outbound drop-off: {formatDateTime(getOutboundDropoffDate(trip), getOutboundDropoffTime(trip))}</p>
                         {hasReturnTrip(trip) && (
@@ -967,6 +973,7 @@ function App({ user, signOut }) {
                               </div>
                               <div className="details">
                                 <p><Bus size={16} /> {trip.vehicleType}</p>
+                                {trip.price !== "" && trip.price != null && <p>Price: {formatPrice(trip.price)}</p>}
                                 <p><Clock size={16} /> Outbound pickup: {formatDateTime(trip.pickupDate, trip.pickupTime)}</p>
                                 <p><Clock size={16} /> Outbound drop-off: {formatDateTime(getOutboundDropoffDate(trip), getOutboundDropoffTime(trip))}</p>
                                 {hasReturnTrip(trip) && (
@@ -1014,6 +1021,16 @@ function App({ user, signOut }) {
                       <span className="detail-value">{selectedTrip.vehicleType}</span>
                     </div>
                   </div>
+
+                  {selectedTrip.price !== "" && selectedTrip.price != null && (
+                    <div className="detail-item">
+                      <div className="notes-icon">€</div>
+                      <div>
+                        <span className="detail-label">Price</span>
+                        <span className="detail-value">{formatPrice(selectedTrip.price)}</span>
+                      </div>
+                    </div>
+                  )}
 
                   {selectedTrip.bookingReferenceNumber && (
                     <div className="detail-item">
@@ -1144,6 +1161,7 @@ function App({ user, signOut }) {
                     </div>
                     <div className="details">
                       <p><Bus size={16} /> {trip.vehicleType}</p>
+                      {trip.price !== "" && trip.price != null && <p>Price: {formatPrice(trip.price)}</p>}
                       <p><Clock size={16} /> Outbound pickup: {formatDateTime(trip.pickupDate, trip.pickupTime)}</p>
                       <p><Clock size={16} /> Outbound drop-off: {formatDateTime(getOutboundDropoffDate(trip), getOutboundDropoffTime(trip))}</p>
                       {hasReturnTrip(trip) && (
