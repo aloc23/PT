@@ -24,6 +24,9 @@ Open **SQL Editor** in the Supabase dashboard and run the SQL files in
 
 1. [`0001_init.sql`](supabase/migrations/0001_init.sql)
 2. [`0002_return_trip_fields.sql`](supabase/migrations/0002_return_trip_fields.sql)
+3. [`0003_user_rls_defaults.sql`](supabase/migrations/0003_user_rls_defaults.sql)
+   (sets `user_id default auth.uid()` and re-applies the per-user RLS
+   policies on the bookings table, called `trips`)
 
 This creates the per-user tables (`trips`, `drivers`, `vehicles`), enables
 Realtime broadcasts, and adds the optional return-trip fields used by the

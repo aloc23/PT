@@ -28,6 +28,13 @@ export function useAuth() {
   return {
     user: session?.user ?? null,
     loading,
-    signOut: () => supabase.auth.signOut(),
+    signOut: async () => {
+      // Drop this device's cached data (unsynced queues are kept) after sign-out.
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("pt_cache_"))
+        .filter((k) => !k.endsWith("_local"))
+        .forEach((k) => localStorage.removeItem(k));
+      return supabase.auth.signOut();
+    },
   };
 }
