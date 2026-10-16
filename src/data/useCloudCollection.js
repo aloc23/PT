@@ -3,6 +3,7 @@ import { supabase } from "../supabaseClient.js";
 import { collectionConfigs } from "./mappers.js";
 
 // Per-(user, collection) localStorage keys for offline cache + pending writes.
+const LOCAL_USER_ID = "local";
 const cacheKey = (userId, name) => `pt_cache_${name}_${userId}`;
 const queueKey = (userId, name) => `pt_queue_${name}_${userId}`;
 
@@ -72,7 +73,10 @@ export function useCloudCollection(collectionName, user) {
   if (!config) {
     throw new Error(`Unknown collection: ${collectionName}`);
   }
-  const userId = user?.id ?? null;
+  // Without a signed-in user the app runs local-only: data is cached in
+  // localStorage under a fixed id and nothing is synced to the cloud.
+  const cloudUserId = user?.id ?? null;
+  const userId = cloudUserId ?? LOCAL_USER_ID;
 
   const [items, setItemsState] = useState(() =>
     userId ? readJSON(cacheKey(userId, collectionName), []) : []
@@ -103,7 +107,7 @@ export function useCloudCollection(collectionName, user) {
   );
 
   const flushQueue = useCallback(async () => {
-    if (!userId || queueRef.current.length === 0) return;
+    if (!cloudUserId || queueRef.current.length === 0) return;
     if (typeof navigator !== "undefined" && navigator.onLine === false) return;
 
     const ops = queueRef.current;
@@ -134,19 +138,18 @@ export function useCloudCollection(collectionName, user) {
 
     queueRef.current = stillPending;
     persistQueue();
-  }, [userId, collectionName, config.table, persistQueue]);
+  }, [userId, cloudUserId, collectionName, config.table, persistQueue]);
 
   // ---- Initial load: hydrate from cache → fetch fresh ----------------------
 
   useEffect(() => {
-    if (!userId) {
-      setItemsState([]);
-      setStatus("idle");
-      return;
-    }
-
     setItemsState(readJSON(cacheKey(userId, collectionName), []));
     queueRef.current = readJSON(queueKey(userId, collectionName), []);
+
+    if (!cloudUserId) {
+      setStatus("ready");
+      return undefined;
+    }
 
     let cancelled = false;
     (async () => {
@@ -182,12 +185,12 @@ export function useCloudCollection(collectionName, user) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, collectionName]);
+  }, [userId, cloudUserId, collectionName]);
 
   // ---- Realtime subscription -----------------------------------------------
 
   useEffect(() => {
-    if (!userId) return undefined;
+    if (!cloudUserId) return undefined;
 
     const channel = supabase
       .channel(`pt-${collectionName}-${userId}`)
@@ -226,18 +229,18 @@ export function useCloudCollection(collectionName, user) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, collectionName, config.table, config.fromRow]);
+  }, [userId, cloudUserId, collectionName, config.table, config.fromRow]);
 
   // ---- Re-flush when the browser comes back online -------------------------
 
   useEffect(() => {
-    if (!userId) return undefined;
+    if (!cloudUserId) return undefined;
     const onOnline = () => {
       flushQueue();
     };
     window.addEventListener("online", onOnline);
     return () => window.removeEventListener("online", onOnline);
-  }, [userId, flushQueue]);
+  }, [cloudUserId, flushQueue]);
 
   // ---- The setter the UI calls ---------------------------------------------
 
@@ -249,9 +252,9 @@ export function useCloudCollection(collectionName, user) {
 
       itemsRef.current = next;
       setItemsState(next);
-      if (userId) writeJSON(cacheKey(userId, collectionName), next);
+      writeJSON(cacheKey(userId, collectionName), next);
 
-      if (!userId) return;
+      if (!cloudUserId) return;
 
       const { inserts, updates, deletes } = diff(prev, next);
       const ops = [
@@ -263,7 +266,7 @@ export function useCloudCollection(collectionName, user) {
       enqueue(ops);
       flushQueue();
     },
-    [userId, collectionName, config, enqueue, flushQueue]
+    [userId, cloudUserId, collectionName, config, enqueue, flushQueue]
   );
 
   return [items, setItems, { status, error, flush: flushQueue }];

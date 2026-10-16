@@ -2,12 +2,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   CalendarDays, Bus, MapPin, Clock, Trash2, Plus, Search, Calendar,
-  List, ChevronLeft, ChevronRight, Users, Settings, Pencil, LogOut, Cloud, CloudOff,
+  List, ChevronLeft, ChevronRight, Users, Settings, Pencil, Cloud, CloudOff,
 } from "lucide-react";
 import "./styles.css";
-import { supabase } from "./supabaseClient.js";
-import { useAuth } from "./auth/useAuth.js";
-import AuthGate from "./auth/AuthGate.jsx";
 import { useCloudCollection } from "./data/useCloudCollection.js";
 
 const emptyForm = {
@@ -74,24 +71,10 @@ function formatDateTime(date, time) {
   return date || time || "—";
 }
 
-// ---------- Top-level: gate the whole app on auth ---------------------------
+// ---------- Top-level: app is open, no sign-in required ---------------------
 
 function Root() {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <main className="authPage">
-        <div className="authCard">
-          <p style={{ margin: 0, color: "#697792" }}>Loading…</p>
-        </div>
-      </main>
-    );
-  }
-
-  if (!user) return <AuthGate />;
-
-  return <App user={user} />;
+  return <App user={null} />;
 }
 
 // ---------- The original app, rewired to the cloud --------------------------
@@ -471,10 +454,6 @@ function App({ user }) {
     setVehicles(vehicles.filter((v) => v.id !== id));
   }
 
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-  }
-
   // ---- Calendar / availability helpers ------------------------------------
 
   function getDaysInMonth(date) {
@@ -543,17 +522,10 @@ function App({ user }) {
       <section className="hero">
         <div>
           <div className="sessionBar">
-            <span className="sessionEmail">
-              Signed in as <strong style={{ marginLeft: 4 }}>{user.email || user.id}</strong>
-            </span>
             <span className={`syncBadge ${isOnline ? "" : "offline"}`}>
               {isOnline ? <Cloud size={14} /> : <CloudOff size={14} />}
-              {isOnline ? "Synced" : "Offline — will sync when online"}
+              {isOnline ? "Local mode" : "Offline"}
             </span>
-            <button className="signOutBtn" onClick={handleSignOut}>
-              <LogOut size={14} style={{ verticalAlign: "-2px", marginRight: 4 }} />
-              Sign out
-            </button>
           </div>
 
           <p className="eyebrow">Priority Transfers</p>
