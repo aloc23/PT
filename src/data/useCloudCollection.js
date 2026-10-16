@@ -139,11 +139,9 @@ export function useCloudCollection(collectionName, user) {
             .upsert(op.row, { onConflict: "id" });
           if (error) throw error;
         } else if (op.type === "delete") {
-          const { error } = await supabase
-            .from(config.table)
-            .delete()
-            .eq("id", op.id)
-            .eq("user_id", userId);
+          let q = supabase.from(config.table).delete().eq("id", op.id);
+          if (!config.shared) q = q.eq("user_id", userId);
+          const { error } = await q;
           if (error) throw error;
         }
         done.add(op);
@@ -159,7 +157,7 @@ export function useCloudCollection(collectionName, user) {
     queueRef.current = queueRef.current.filter((op) => !done.has(op));
     persistQueue();
     setError(lastError);
-  }, [userId, cloudUserId, collectionName, config.table, persistQueue]);
+  }, [userId, cloudUserId, collectionName, config.table, config.shared, persistQueue]);
 
   // ---- Initial load: hydrate from cache → fetch fresh ----------------------
 
@@ -180,11 +178,9 @@ export function useCloudCollection(collectionName, user) {
         // Drain any queued offline writes first so the server reflects them.
         await flushQueue();
 
-        const { data, error } = await supabase
-          .from(config.table)
-          .select("*")
-          .eq("user_id", userId)
-          .order("created_at", { ascending: true });
+        let query = supabase.from(config.table).select("*");
+        if (!config.shared) query = query.eq("user_id", userId);
+        const { data, error } = await query.order("created_at", { ascending: true });
         if (error) throw error;
         if (cancelled) return;
 
@@ -235,7 +231,7 @@ export function useCloudCollection(collectionName, user) {
           event: "*",
           schema: "public",
           table: config.table,
-          filter: `user_id=eq.${userId}`,
+          ...(config.shared ? {} : { filter: `user_id=eq.${userId}` }),
         },
         (payload) => {
           const { eventType, new: newRow, old: oldRow } = payload;
@@ -264,7 +260,7 @@ export function useCloudCollection(collectionName, user) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, cloudUserId, collectionName, config.table, config.fromRow]);
+  }, [userId, cloudUserId, collectionName, config.table, config.shared, config.fromRow]);
 
   // ---- Re-flush when the browser comes back online -------------------------
 
