@@ -28,6 +28,8 @@ Open **SQL Editor** in the Supabase dashboard and run the SQL files in
    (sets `user_id default auth.uid()` and re-applies the per-user RLS
    policies on the bookings table, called `trips`)
 
+**All three migrations are required for cross-device sync.** If `0002` is skipped, saving a booking fails and it stays only on the device that created it; the app shows a "Not saved to cloud" banner with the error.
+
 This creates the per-user tables (`trips`, `drivers`, `vehicles`), enables
 Realtime broadcasts, and adds the optional return-trip fields used by the
 schedule form.

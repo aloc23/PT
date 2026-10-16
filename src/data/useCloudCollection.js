@@ -24,6 +24,23 @@ const writeJSON = (key, value) => {
   }
 };
 
+// Turn schema-mismatch errors (missing column/table) into an actionable message.
+function describeError(err, table) {
+  const code = err?.code;
+  const msg = err?.message || "";
+  if (
+    code === "PGRST204" || code === "PGRST205" || code === "42703" || code === "42P01" ||
+    /column .* (of relation|does not exist)|schema cache/i.test(msg)
+  ) {
+    const wrapped = new Error(
+      `Database schema is out of date for "${table}" (${msg}). Run all SQL files in supabase/migrations/ in the Supabase SQL Editor`
+    );
+    wrapped.code = code;
+    return wrapped;
+  }
+  return err;
+}
+
 // Diff two arrays of {id, ...} by id, returning {inserts, updates, deletes}.
 function diff(prev, next) {
   const prevById = new Map(prev.map((it) => [it.id, it]));
@@ -133,7 +150,7 @@ export function useCloudCollection(collectionName, user) {
       } catch (err) {
         // Keep this op for the next retry. If we keep failing, the user will
         // still have the changes locally — they just won't sync until online.
-        lastError = err;
+        lastError = describeError(err, config.table);
         console.warn(`[cloud:${collectionName}] queued op failed`, err);
       }
     }
@@ -193,7 +210,7 @@ export function useCloudCollection(collectionName, user) {
       } catch (err) {
         if (cancelled) return;
         console.warn(`[cloud:${collectionName}] initial fetch failed`, err);
-        setError(err);
+        setError(describeError(err, config.table));
         // Stay on cached data; mark ready so the UI isn't blocked.
         setStatus("ready");
       }
