@@ -24,6 +24,7 @@ const emptyForm = {
   returnDropoffDate: "",
   returnDropoffTime: "",
   driverName: "",
+  price: "",
   notes: "",
   status: "Scheduled",
 };
@@ -736,6 +737,11 @@ function App({ user, signOut }) {
                 Manage
               </button>
             </div>
+          </label>
+
+          <label>
+            Price
+            <input type="number" min="0" step="0.01" inputMode="decimal" value={form.price} onChange={(e) => updateField("price", e.target.value)} placeholder="0.00" />
           </label>
 
           <label>
